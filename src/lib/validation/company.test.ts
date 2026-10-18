@@ -140,3 +140,54 @@ describe("normalisePhone", () => {
     expect(normalisePhone("(028) 3812.3456")).toBe("02838123456");
   });
 });
+
+describe("payload sent to save_company", () => {
+  /** Mirrors the mapping in src/lib/companies/actions.ts. */
+  function rpcContacts(raw: unknown) {
+    const v = companySchema.parse(raw);
+    return v.contacts.map((c) => ({
+      contact_name: c.contactName,
+      phone: c.phone,
+    }));
+  }
+
+  it("sends a name-only contact through, with a null phone", () => {
+    expect(
+      rpcContacts({
+        ...base,
+        contacts: [{ contactName: "Anh Hùng - kho", phone: "" }],
+      }),
+    ).toEqual([{ contact_name: "Anh Hùng - kho", phone: null }]);
+  });
+
+  it("sends a phone-only contact through, with a null name", () => {
+    expect(
+      rpcContacts({
+        ...base,
+        contacts: [{ contactName: "", phone: "0901234567" }],
+      }),
+    ).toEqual([{ contact_name: null, phone: "0901234567" }]);
+  });
+
+  it("sends nothing for a row blank in both fields", () => {
+    expect(
+      rpcContacts({ ...base, contacts: [{ contactName: "", phone: "" }] }),
+    ).toEqual([]);
+  });
+
+  it("keeps the order the user typed", () => {
+    expect(
+      rpcContacts({
+        ...base,
+        contacts: [
+          { contactName: "Phòng hành chính", phone: "" },
+          { contactName: "", phone: "" },
+          { contactName: "Chị Lan", phone: "0912345678" },
+        ],
+      }),
+    ).toEqual([
+      { contact_name: "Phòng hành chính", phone: null },
+      { contact_name: "Chị Lan", phone: "0912345678" },
+    ]);
+  });
+});
