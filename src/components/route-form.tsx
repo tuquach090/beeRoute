@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   AlertTriangle,
   Crosshair,
@@ -8,6 +14,7 @@ import {
   Flag,
   Loader2,
   MapPin,
+  Navigation,
   Phone,
   StickyNote,
   X,
@@ -34,6 +41,7 @@ import { optimizeRoute } from "@/lib/route-optimizer/optimize";
 import type { OptimizeResult } from "@/lib/route-optimizer/types";
 import {
   buildGoogleMapsLinks,
+  buildSingleStopLink,
   type RouteLeg,
   type StopLabel,
 } from "@/lib/google-maps/build-links";
@@ -55,6 +63,14 @@ export function RouteForm({ companies, addedId }: Props) {
   const [computed, setComputed] = useState<Computed | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  const resultRef = useRef<HTMLDivElement>(null);
+
+  // The result lands below the fold on a phone, under the fixed action bar.
+  // Without this the button looks like it did nothing.
+  useEffect(() => {
+    if (!computed) return;
+    resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [computed]);
 
   useEffect(() => {
     if (!addedId) return;
@@ -251,6 +267,7 @@ export function RouteForm({ companies, addedId }: Props) {
 
       {computed && (
         <ResultCard
+          ref={resultRef}
           computed={computed}
           companies={companies}
           startLabel={
@@ -263,6 +280,7 @@ export function RouteForm({ companies, addedId }: Props) {
               ? vi.route.useCurrentLocation
               : draft.endAddress
           }
+          travelMode={draft.travelMode}
         />
       )}
 
@@ -288,21 +306,25 @@ export function RouteForm({ companies, addedId }: Props) {
 }
 
 function ResultCard({
+  ref,
   computed,
   companies,
   startLabel,
   endLabel,
+  travelMode,
 }: {
+  ref: React.Ref<HTMLDivElement>;
   computed: Computed;
   companies: CompanyWithContacts[];
   startLabel: string;
   endLabel: string;
+  travelMode: TravelMode;
 }) {
   const { result, links } = computed;
   const byId = new Map(companies.map((c) => [c.id, c]));
 
   return (
-    <section className="bg-card rounded-2xl border p-4">
+    <section ref={ref} className="bg-card scroll-mt-16 rounded-2xl border p-4">
       <h2 className="font-semibold">{vi.route.resultTitle}</h2>
 
       <ol className="mt-4">
@@ -318,6 +340,14 @@ function ResultCard({
               km={result.legsKm[i]}
               contacts={company?.company_contacts}
               note={company?.note}
+              mapUrl={buildSingleStopLink(
+                {
+                  location: s.location,
+                  name: company?.display_name ?? s.label,
+                  address: company?.address,
+                },
+                travelMode,
+              )}
             />
           );
         })}
@@ -482,6 +512,7 @@ function Stop({
   contacts,
   note,
   last,
+  mapUrl,
 }: {
   index: number | null;
   name: string;
@@ -490,6 +521,7 @@ function Stop({
   contacts?: CompanyWithContacts["company_contacts"];
   note?: string | null;
   last?: boolean;
+  mapUrl?: string;
 }) {
   return (
     <li className="relative flex gap-3 pb-4 last:pb-0">
@@ -558,6 +590,15 @@ function Stop({
             <StickyNote className="mt-0.5 size-3.5 shrink-0" aria-hidden />
             {note}
           </p>
+        )}
+
+        {mapUrl && (
+          <Button asChild variant="outline" size="sm" className="mt-2 gap-1.5">
+            <a href={mapUrl} target="_blank" rel="noopener noreferrer">
+              <Navigation className="size-3.5" aria-hidden />
+              {vi.route.openThisStop}
+            </a>
+          </Button>
         )}
       </div>
     </li>

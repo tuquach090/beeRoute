@@ -69,7 +69,8 @@ export const vi = {
     totalDistance: "Tổng quãng đường",
     straightLineNote:
       "Khoảng cách đường chim bay, chỉ dùng để sắp thứ tự. Đường đi thật do Google Maps tính.",
-    openInMaps: "Mở trên Google Maps",
+    openInMaps: "Mở cả tuyến trên Google Maps",
+    openThisStop: "Dẫn tới điểm này",
     openLeg: (n: number) => `Mở chặng ${n}`,
     travelMode: "Phương tiện",
     motorbike: "Xe máy",
@@ -154,6 +155,7 @@ export const vi = {
     optional: "Không bắt buộc",
     back: "Quay lại",
     close: "Đóng",
+    loading: "Đang tải…",
     km: "km",
   },
 } as const;

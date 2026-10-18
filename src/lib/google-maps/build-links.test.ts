@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_WAYPOINTS_PER_LINK,
   buildGoogleMapsLinks,
+  buildSingleStopLink,
   pointToParam,
 } from "./build-links";
 import type { Stop } from "@/lib/route-optimizer/types";
@@ -195,5 +196,49 @@ describe("buildGoogleMapsLinks — labelled stops", () => {
     expect(params(legs[0].url).get("waypoints")).toBe(
       "10.78,106.7|10.79,106.71",
     );
+  });
+});
+
+describe("buildSingleStopLink", () => {
+  const loc = { lat: 10.7909, lng: 106.6533 };
+
+  it("omits origin so Maps starts from the current location", () => {
+    const p = params(buildSingleStopLink({ location: loc }));
+    expect(p.get("origin")).toBeNull();
+    expect(p.get("waypoints")).toBeNull();
+    expect(p.get("destination")).toBe("10.7909,106.6533");
+    expect(p.get("travelmode")).toBe("two-wheeler");
+  });
+
+  it("uses the readable label when the stop has a real address", () => {
+    expect(
+      params(
+        buildSingleStopLink({
+          location: loc,
+          name: "Kho Tân Bình",
+          address: "285 Cách Mạng Tháng 8, TP.HCM",
+        }),
+      ).get("destination"),
+    ).toBe("Kho Tân Bình, 285 Cách Mạng Tháng 8, TP.HCM");
+  });
+
+  it("falls back to coordinates when the address is itself coordinates", () => {
+    expect(
+      params(
+        buildSingleStopLink({
+          location: loc,
+          name: "Lạc Tỷ",
+          address: "10.739866, 106.614413",
+        }),
+      ).get("destination"),
+    ).toBe("10.7909,106.6533");
+  });
+
+  it("accepts the car travel mode", () => {
+    expect(
+      params(buildSingleStopLink({ location: loc }, "driving")).get(
+        "travelmode",
+      ),
+    ).toBe("driving");
   });
 });

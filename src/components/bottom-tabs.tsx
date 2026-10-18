@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Route } from "lucide-react";
+import { Building2, Loader2, Route } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { vi } from "@/lib/i18n/vi";
 
@@ -37,7 +37,7 @@ export function BottomTabs() {
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <Icon className="size-6" aria-hidden />
+                <TabIcon Icon={Icon} />
                 {label}
               </Link>
             </li>
@@ -45,5 +45,20 @@ export function BottomTabs() {
         })}
       </ul>
     </nav>
+  );
+}
+
+/**
+ * Swaps the tab icon for a spinner while its navigation is in flight.
+ *
+ * useLinkStatus only reports for the Link it sits inside, so this has to be a
+ * child component rather than state held by the nav.
+ */
+function TabIcon({ Icon }: { Icon: typeof Route }) {
+  const { pending } = useLinkStatus();
+  return pending ? (
+    <Loader2 className="size-6 animate-spin" aria-hidden />
+  ) : (
+    <Icon className="size-6" aria-hidden />
   );
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronRight, Globe, Phone, Plus } from "lucide-react";
+import { RowChevron } from "@/components/row-chevron";
+import { Globe, Phone, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listOwnCompanies } from "@/lib/companies/queries";
 import { vi } from "@/lib/i18n/vi";
@@ -65,10 +66,7 @@ export default async function CompaniesPage() {
                       : vi.companies.noContact}
                   </span>
                 </span>
-                <ChevronRight
-                  className="size-5 shrink-0 text-muted-foreground"
-                  aria-hidden
-                />
+                <RowChevron />
               </Link>
             </li>
           ))}

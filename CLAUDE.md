@@ -2,6 +2,9 @@
 
 > File này hướng dẫn Claude Code xây dựng BeeRoute. Đọc hết trước khi viết dòng code đầu tiên.
 > Ngôn ngữ giao tiếp với chủ dự án: **tiếng Việt**, xưng hô thân mật, ngắn gọn.
+>
+> Cập nhật 18/10/2026, sau khi xong Giai đoạn 0–5. Các mục mô tả **hiện trạng**, không
+> phải dự định. Chỗ nào code khác file này thì code đúng — sửa file này lại.
 
 ---
 
@@ -13,123 +16,134 @@
 
 ## 2. Công nghệ
 
-| Phần             | Lựa chọn                                                                   |
-| ---------------- | -------------------------------------------------------------------------- |
-| Frontend         | **Next.js** (App Router, bản ổn định mới nhất), **TypeScript** strict      |
-| Style            | **Tailwind CSS**; thư viện component chốt ở Giai đoạn 0 (gợi ý: shadcn/ui) |
-| Backend/DB       | **Supabase**: Auth (Google OAuth) + Postgres + Row Level Security          |
-| Kết nối Supabase | `@supabase/supabase-js` + `@supabase/ssr` (cookie-based session)           |
-| Form             | `react-hook-form` + `zod`                                                  |
-| Test             | `vitest` cho phần logic tối ưu tuyến                                       |
-| Deploy           | Vercel (FE) + Supabase Cloud (gói free)                                    |
+| Phần | Lựa chọn |
+|---|---|
+| Frontend | **Next.js 16** (App Router), **TypeScript** strict |
+| Style | **Tailwind CSS v4** (cấu hình bằng `@theme` trong CSS, không có `tailwind.config`) |
+| Component | **shadcn/ui** — preset `radix-nova`, code nằm trong `src/components/ui/` |
+| Backend/DB | **Supabase**: Auth (Google OAuth) + Postgres + Row Level Security |
+| Kết nối Supabase | `@supabase/supabase-js` + `@supabase/ssr` (cookie-based session) |
+| Form | `react-hook-form` + `zod` |
+| Test | `vitest` cho toàn bộ logic thuần |
+| Deploy | Vercel (FE) + Supabase Cloud (gói free) |
 
 Không thêm thư viện ngoài danh sách này nếu chưa hỏi chủ dự án.
+
+**Supabase là dịch vụ ngoài duy nhất.** Không gọi API bản đồ, geocoding hay gì khác.
+
+Hai chỗ lệch so với cách làm thông thường, có lý do:
+
+- **Không dùng `@hookform/resolvers`.** Peer dependency của nó đòi zod v3, trong khi
+  `shadcn` kéo zod v4 — xung đột không gỡ được. Thay bằng
+  `src/lib/validation/zod-resolver.ts`, khoảng 30 dòng.
+- **`cacheComponents` tắt** trong `next.config.ts`. Mọi màn hình đều nằm sau đăng nhập và
+  đọc dữ liệu riêng từng người, nên bật nó chỉ bắt mọi route phải bọc `<Suspense>` mà
+  không cache được gì. Đáng bật lại nếu sau này có phần tìm công ty `is_public` — truy vấn
+  đó giống nhau với mọi người.
 
 ## 3. Quy tắc làm việc cho Claude Code
 
 1. **Làm theo đúng thứ tự giai đoạn** ở mục 9. Không nhảy sang giai đoạn sau khi giai đoạn trước chưa được chủ dự án xác nhận.
-2. **Giai đoạn 0 (UI/UX) bắt buộc làm trước.** Đặt câu hỏi ở mục 4, chờ trả lời, rồi mới dựng giao diện.
-3. Mỗi giai đoạn xong: tóm tắt ngắn đã làm gì, cách chạy thử, và những gì còn thiếu.
-4. Không tự ý lưu kết quả tối ưu tuyến vào database (xem mục 7).
-5. Không commit file `.env*` hay key bí mật. Có file `.env.example` liệt kê đủ biến.
-6. Code, tên biến, tên file bằng **tiếng Anh**. Chữ hiển thị trên giao diện bằng **tiếng Việt** (gom vào một chỗ, ví dụ `src/lib/i18n/vi.ts`, để sau này dịch).
-7. Có gì chưa rõ thì **hỏi**, đừng đoán ở những chỗ ảnh hưởng tới dữ liệu hoặc luồng chính.
+2. Mỗi giai đoạn xong: tóm tắt ngắn đã làm gì, cách chạy thử, và những gì còn thiếu.
+3. Không tự ý lưu kết quả tối ưu tuyến vào database (xem mục 7).
+4. Không commit file `.env*` hay key bí mật. Có file `.env.example` liệt kê đủ biến.
+5. Code, tên biến, tên file bằng **tiếng Anh**. Chữ hiển thị trên giao diện bằng **tiếng Việt**, gom hết vào `src/lib/i18n/vi.ts`.
+6. Có gì chưa rõ thì **hỏi**, đừng đoán ở những chỗ ảnh hưởng tới dữ liệu hoặc luồng chính.
+7. **Không bao giờ sửa migration đã chạy.** Viết migration mới.
+8. **Một hàm Postgres chỉ được định nghĩa ở đúng một migration.** `create or replace` với
+   cùng chữ ký thì cái chạy sau đè cái trước, nên hai migration cùng khai báo một hàm sẽ
+   cho kết quả khác nhau tuỳ thứ tự chạy. Đã dính lỗi này một lần với `save_company`
+   (002 và 003 cùng khai báo, phải thêm 004 để chữa).
+9. Sửa logic thuần thì **viết test trước khi báo xong**. Chạy `npm test`.
 
-## 4. Giai đoạn 0 – Hỏi chủ dự án về phong cách thiết kế
+## 4. Giai đoạn 0 — các quyết định thiết kế (ĐÃ CHỐT)
 
-Trước khi code giao diện, hỏi lần lượt các câu dưới đây (dùng câu hỏi trắc nghiệm nếu công cụ cho phép), mỗi câu kèm **gợi ý mặc định** để chủ dự án chỉ cần đồng ý hoặc sửa:
+Chi tiết đầy đủ, kèm bảng màu và lý do, nằm ở **[docs/design.md](docs/design.md)**.
 
-| #   | Câu hỏi                                                                                                    | Gợi ý mặc định                                                                   |
-| --- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| 1   | Thiết kế ưu tiên điện thoại hay máy tính?                                                                  | **Mobile-first**, màn hình chính tối ưu cho 390px; desktop chỉ cần không vỡ      |
-| 2   | Phong cách tổng thể? (a) vui, kiểu sticker như icon; (b) gọn, chuyên nghiệp kiểu SaaS; (c) tối giản tối đa | **(a) pha (b)**: thẻ bo góc lớn, viền rõ, màu thương hiệu mạnh, nhưng bố cục gọn |
-| 3   | Chế độ sáng/tối?                                                                                           | **Sáng** mặc định, chuẩn bị token màu để thêm chế độ tối sau                     |
-| 4   | Font chữ?                                                                                                  | **Be Vietnam Pro** (hỗ trợ tiếng Việt tốt), số dùng tabular                      |
-| 5   | Điều hướng chính?                                                                                          | **Thanh tab dưới đáy** 2 mục: "Tuyến đường", "Công ty"                           |
-| 6   | Có cần bản đồ xem trước trong app không?                                                                   | **Chưa cần** ở MVP, chỉ danh sách thứ tự + nút mở Google Maps                    |
-| 7   | Nút hành động chính đặt ở đâu?                                                                             | **Cố định dưới đáy màn hình**, to (cao ≥ 52px), dễ bấm bằng ngón cái             |
-| 8   | Phương tiện mặc định khi mở Google Maps?                                                                   | **Xe máy** (`two-wheeler`), cho phép đổi sang ô tô                               |
+| # | Câu hỏi | Đã chốt |
+|---|---|---|
+| 1 | Ưu tiên thiết bị | Mobile-first, nhắm 390px; desktop chỉ cần không vỡ |
+| 2 | Phong cách | Thẻ bo góc lớn, viền rõ, màu thương hiệu mạnh, bố cục gọn |
+| 3 | Sáng / tối | **Làm cả hai**, có nút đổi ở thanh đầu trang |
+| 4 | Font | Be Vietnam Pro, số dùng tabular |
+| 5 | Điều hướng | Thanh tab dưới đáy: Tuyến đường / Công ty |
+| 6 | Bản đồ trong app | Không làm |
+| 7 | Nút hành động chính | Cố định dưới đáy, cao ≥ 52px |
+| 8 | Phương tiện mặc định | Xe máy (`two-wheeler`), đổi được sang ô tô |
+| — | Thư viện component | shadcn/ui |
 
-Sau khi có câu trả lời:
-
-- Tạo file `docs/design.md` ghi lại các quyết định.
-- Tạo **design tokens** (màu, font, bo góc, khoảng cách) trong Tailwind config.
-- Dựng **4 màn hình tĩnh** (dữ liệu giả) để chủ dự án duyệt: Đăng nhập, Tối ưu tuyến, Chọn công ty (dialog/sheet), Tạo công ty. Duyệt xong mới nối dữ liệu thật.
-
-### Thương hiệu có sẵn
+### Thương hiệu
 
 - Tên: **BeeRoute** – "Tối ưu tuyến giao hàng".
-- Logo: con ong thân là ghim định vị, bay theo đường chấm. File nằm ở `public/brand/` (`BeeRoute-icon.svg`, các PNG 1024/512/192, favicon 64).
-- Màu:
-  - Xanh BeeRoute `#2F5BEA` (màu chính, nút chính)
-  - Vàng mật `#FFC21A` (điểm nhấn, trạng thái được chọn)
-  - Đen than `#1C1A17` (chữ)
-  - Xanh nhạt `#E8F0FF` (nền phụ)
-- Kiểm tra độ tương phản chữ tối thiểu 4.5:1. Chữ trắng trên vàng **không đạt**: trên nền vàng luôn dùng chữ đen than.
+- Logo: con ong thân là ghim định vị, bay theo đường chấm. File ở `public/brand/`
+  (`BeeRoute-icon.svg`, PNG 1024/512/192, `favicon-64.png`).
+  Dùng trong app qua component `src/components/logo.tsx`.
+- Màu: xanh `#2F5BEA`, vàng mật `#FFC21A`, đen than `#1C1A17`, xanh nhạt `#E8F0FF`.
+- Tương phản chữ tối thiểu 4.5:1. **Trên nền vàng luôn dùng chữ đen than** (chữ trắng chỉ
+  đạt 1.9:1). Kiểm tra bằng `npm run check:contrast` — đổi màu thì chạy lại trước khi commit.
 
 ## 5. Chức năng MVP
 
-### 5.1 Đăng nhập (bắt buộc)
+### 5.1 Đăng nhập (bắt buộc) — ĐÃ LÀM
 
 - **Toàn bộ app yêu cầu đăng nhập.** Chưa đăng nhập thì mọi đường dẫn đều chuyển về `/login`.
-- Chỉ có **Đăng nhập bằng Google** (Supabase Auth, provider Google). Chưa làm đăng ký bằng email/mật khẩu.
-- Luồng: `/login` → Google → `/auth/callback` (đổi code lấy session) → về trang chính `/`.
-- Bảo vệ route bằng `middleware.ts` + kiểm tra session phía server.
-- Có nút **Đăng xuất** (trong menu tài khoản).
+- Chỉ có **Đăng nhập bằng Google** (Supabase Auth). Chưa làm email/mật khẩu.
+- Luồng: `/login` → Google → `/auth/callback` → về `/`.
+- Bảo vệ hai lớp: `middleware.ts` **và** kiểm tra lại session trong `(app)/layout.tsx`.
+  Middleware có thể thủng do matcher cấu hình sai, kiểm tra phía server thì không.
+- Luôn dùng `getUser()`, **không dùng `getSession()`** — `getSession()` chỉ giải mã cookie,
+  client giả được.
+- Đăng xuất: `POST /auth/signout` (dùng POST để prefetch không làm đăng xuất nhầm).
 
-### 5.2 Trang chính: Tối ưu tuyến (`/`)
-
-Form gồm 3 phần, từ trên xuống:
+### 5.2 Trang chính: Tối ưu tuyến (`/`) — ĐÃ LÀM
 
 **a) Điểm bắt đầu** (bắt buộc), chọn 1 trong 2:
-
-- **Vị trí hiện tại**: lấy bằng Geolocation API của trình duyệt. Xử lý khi người dùng từ chối quyền hoặc lấy vị trí thất bại (hiện thông báo, gợi ý nhập tay).
-- **Nhập địa chỉ**: ô nhập có gợi ý địa chỉ (xem mục 8 – Geocoding), chọn xong phải có toạ độ.
+- **Vị trí hiện tại**: Geolocation API, lấy **đúng lúc bấm Tối ưu** chứ không dùng toạ độ cũ.
+  Có xử lý từ chối quyền / quá hạn / trình duyệt không hỗ trợ.
+- **Nhập địa chỉ**: dán link Google Maps hoặc toạ độ (xem mục 8).
 
 **b) Các điểm đến** (bắt buộc ít nhất 1):
+- Nút **"+ Thêm điểm đến"** → bottom sheet danh sách công ty, có ô tìm theo tên/địa chỉ,
+  chọn nhiều bằng checkbox, bấm "Xong". Huỷ thì không áp dụng gì.
+- Chưa có công ty nào hoặc không tìm thấy → nút **"Tạo công ty mới"** →
+  `/companies/new?returnTo=/`.
+- Tạo xong quay lại thì **giữ nguyên lựa chọn cũ** và **tự chọn sẵn công ty vừa tạo**
+  (`?added=<id>`). Trạng thái form nằm trong `sessionStorage`, quản lý ở
+  `src/lib/route-draft.ts`.
 
-- Nút **"+ Thêm điểm đến"** → mở dialog (trên điện thoại là bottom sheet) hiển thị **danh sách công ty** đã lưu:
-  - Có ô tìm kiếm theo tên hoặc địa chỉ.
-  - **Chọn được nhiều công ty** cùng lúc (checkbox), bấm "Xong" để thêm.
-  - Nếu chưa có công ty nào, hoặc không tìm thấy: hiện nút **"Tạo công ty mới"** → chuyển sang `/companies/new?returnTo=/`.
-- Sau khi tạo công ty và quay lại: **giữ nguyên các lựa chọn trước đó** (điểm bắt đầu, các điểm đến đã chọn, điểm kết thúc) và **tự chọn sẵn công ty vừa tạo**. Lưu trạng thái form tạm trong `sessionStorage` để không mất khi chuyển trang.
-- Danh sách điểm đến đã chọn hiện dạng thẻ, có nút xoá từng điểm.
+**c) Điểm kết thúc** (bắt buộc): giống điểm bắt đầu.
 
-**c) Điểm kết thúc** (bắt buộc), chọn 1 trong 2:
+**d) Phương tiện**: xe máy / ô tô.
 
-- **Vị trí hiện tại** (lấy lại lúc bấm tối ưu).
-- **Nhập địa chỉ** (giống điểm bắt đầu).
+**e) Nút "Tối ưu tuyến"** → chạy module mục 6 **ngay trên trình duyệt**, không gọi server.
 
-**d) Nút "Tối ưu tuyến"** → chạy module tối ưu (mục 6) **ngay trên trình duyệt**, không gọi server.
+**f) Kết quả** hiện ngay trên trang: thứ tự đã tối ưu, khoảng cách từng chặng, tổng km
+(ghi rõ là đường chim bay), số điện thoại bấm gọi được (`tel:`), ghi chú của công ty,
+và nút **"Mở trên Google Maps"**.
 
-**e) Kết quả** hiện ngay trên trang:
+### 5.3 Quản lý công ty — ĐÃ LÀM
 
-- Danh sách theo thứ tự đã tối ưu: Bắt đầu → 1 → 2 → … → Kết thúc, mỗi điểm có tên công ty, địa chỉ, khoảng cách từ điểm trước.
-- Tổng quãng đường ước tính (km, ghi rõ là đường chim bay).
-- Bấm vào một điểm để xem nhanh **liên hệ** (bấm số là gọi được, `tel:`) và **ghi chú** của công ty đó.
-- Nút lớn **"Mở trên Google Maps"** → mở link chỉ đường với thứ tự đã tối ưu (mục 6.3).
+**Danh sách** `/companies` · **Tạo** `/companies/new` · **Sửa** `/companies/[id]/edit`
 
-### 5.3 Quản lý công ty
+| Trường | Bắt buộc | Ghi chú |
+|---|---|---|
+| Tên hiển thị | ✅ | Tối đa 120 ký tự |
+| Địa chỉ | ✅ | **Bắt buộc có toạ độ** mới lưu được (xem mục 8) |
+| Liên hệ | ❌ | Nhiều dòng. Mỗi dòng: tên người/phòng ban + số điện thoại |
+| Ghi chú | ❌ | Việc cần làm khi tới nơi |
+| Cho người khác tìm thấy | ❌ | Cờ `is_public`, mặc định tắt (xem mục 7) |
 
-**Danh sách** `/companies`: tìm kiếm, bấm để sửa, nút tạo mới.
-
-**Tạo / sửa** `/companies/new`, `/companies/[id]/edit`:
-
-| Trường             | Bắt buộc | Ghi chú                                                                                               |
-| ------------------ | -------- | ----------------------------------------------------------------------------------------------------- |
-| Tên hiển thị       | ✅       | Tối đa 120 ký tự                                                                                      |
-| Địa chỉ (location) | ✅       | Ô nhập có gợi ý; **bắt buộc phải có toạ độ** (lat/lng) trước khi lưu                                  |
-| Liên hệ            | ❌       | Danh sách, **thêm được nhiều dòng**. Mỗi dòng 2 ô: **Người liên hệ / phòng ban** và **Số điện thoại** |
-| Ghi chú            | ❌       | Textarea: việc cần làm khi tới nơi (gọi ai, thủ tục vào cổng, có lấy mẫu không…)                      |
-
-- Số điện thoại: kiểm tra định dạng Việt Nam cơ bản (10 số, bắt đầu bằng 0, hoặc +84), cho phép số bàn có mã vùng.
-- Mỗi dòng liên hệ cần có ít nhất số điện thoại; tên có thể để trống.
-- Lưu xong: nếu có `returnTo` thì quay về đó kèm id công ty mới (`?added=<id>`); không có thì về `/companies`.
+- **Một dòng liên hệ chỉ cần có tên HOẶC có số** — cả hai đều không bắt buộc. Dòng trống
+  cả hai thì bị bỏ khi lưu, không tạo bản ghi rác.
+- Số điện thoại có nhập thì phải đúng định dạng VN: 10–11 số bắt đầu bằng `0`, hoặc `+84`.
+  Chấp nhận dấu cách, gạch, ngoặc — sẽ được chuẩn hoá trước khi lưu.
+- Lưu xong: có `returnTo` thì quay về đó kèm `?added=<id>`, không thì về `/companies`.
 - Xoá công ty: có hộp xác nhận.
 
-## 6. Module tối ưu tuyến (viết riêng, không dùng API ngoài)
+## 6. Module tối ưu tuyến — ĐÃ LÀM
 
-Vị trí: `src/lib/route-optimizer/`. **Thuần TypeScript**, không phụ thuộc React, Next.js hay Supabase, để sau này tái dùng ở backend.
+`src/lib/route-optimizer/`. **Thuần TypeScript**, không phụ thuộc React, Next.js hay
+Supabase. Test ở `optimize.test.ts`.
 
 ### 6.1 Giao diện hàm
 
@@ -137,15 +151,11 @@ Vị trí: `src/lib/route-optimizer/`. **Thuần TypeScript**, không phụ thu�
 type LatLng = { lat: number; lng: number };
 type Stop = { id: string; label: string; location: LatLng };
 
-type OptimizeInput = {
-  start: LatLng;
-  stops: Stop[]; // các điểm đến, không trùng id
-  end: LatLng; // điểm kết thúc cố định
-};
+type OptimizeInput = { start: LatLng; stops: Stop[]; end: LatLng };
 
 type OptimizeResult = {
   orderedStops: Stop[];
-  legsKm: number[]; // khoảng cách từng chặng: start→stop1, …, stopN→end
+  legsKm: number[];   // start→stop1, …, stopN→end. Luôn = orderedStops.length + 1
   totalKm: number;
   method: "exact" | "heuristic";
 };
@@ -155,120 +165,173 @@ export function optimizeRoute(input: OptimizeInput): OptimizeResult;
 
 ### 6.2 Thuật toán
 
-- Khoảng cách: **Haversine** (km, bán kính Trái Đất 6371 km). Tính sẵn ma trận khoảng cách một lần.
-- Mục tiêu: **tổng quãng đường nhỏ nhất** với điểm đầu và điểm cuối cố định.
-- **≤ 8 điểm đến**: thử mọi hoán vị (chính xác), `method: 'exact'`.
-- **> 8 điểm đến**: **Nearest Neighbor** (từ điểm hiện tại đi tới điểm gần nhất chưa ghé, đúng ý "gần trước, xa sau") để có lời giải ban đầu, rồi cải thiện bằng **2-opt** tới khi không giảm được nữa, `method: 'heuristic'`.
-- Các trường hợp biên: 0 điểm đến (báo lỗi), 1 điểm đến, các điểm trùng toạ độ.
-- **Unit test bằng vitest**: các trường hợp biên, so kết quả heuristic với kết quả exact trên bộ dữ liệu nhỏ, và một bộ toạ độ thật ở TP.HCM.
-- Ghi rõ trong code và trên giao diện: đây là **khoảng cách đường chim bay**, chỉ dùng để sắp thứ tự. Đường đi thật do Google Maps tính.
+- Khoảng cách **Haversine** (km, bán kính 6371). Ma trận tính sẵn một lần.
+- Điểm đầu và cuối cố định — đây là bài toán **đường đi mở**, không phải chu trình.
+- **≤ 8 điểm đến** (`EXACT_MAX_STOPS`): duyệt mọi hoán vị, có **cắt nhánh** — bỏ ngay
+  nhánh nào đã đắt hơn lời giải tốt nhất hiện có. `method: "exact"`.
+- **> 8 điểm**: Nearest Neighbor để có lời giải ban đầu, rồi **2-opt** tới khi không giảm
+  được nữa. `method: "heuristic"`.
+- Luôn ghi rõ trong code và trên giao diện: đây là **khoảng cách đường chim bay**, chỉ dùng
+  để sắp thứ tự. Đường đi thật do Google Maps tính.
 
 ### 6.3 Tạo link Google Maps
 
-Dùng Google Maps URLs (không cần API key):
+`src/lib/google-maps/build-links.ts`, test ở `build-links.test.ts`. Không cần API key.
 
 ```
-https://www.google.com/maps/dir/?api=1
-  &origin=<lat>,<lng>
-  &destination=<lat>,<lng>
-  &waypoints=<lat>,<lng>|<lat>,<lng>|…
-  &travelmode=two-wheeler   // hoặc driving
+https://www.google.com/maps/dir/?api=1&origin=…&destination=…&waypoints=…|…&travelmode=two-wheeler
 ```
 
-- Dùng **toạ độ** thay vì chuỗi địa chỉ để Google không hiểu sai.
-- Nhớ `encodeURIComponent` cho phần waypoints.
-- **Giới hạn số waypoint**: Google Maps chỉ nhận số điểm dừng giới hạn trong một link (ít hơn trên trình duyệt điện thoại). Nếu vượt giới hạn thì **chia thành nhiều chặng**, hiện nhiều nút "Mở chặng 1", "Mở chặng 2"…, điểm cuối chặng trước là điểm đầu chặng sau. Để giới hạn này thành hằng số dễ chỉnh, và kiểm tra lại tài liệu Google Maps URLs lúc làm.
-- Viết hàm riêng `buildGoogleMapsLinks(result, start, end, travelMode): string[]`, có unit test.
+**Mỗi điểm dừng gửi đi dưới dạng nào** — đây là chỗ dễ gây hại nhất trong dự án:
+
+| Dữ liệu có | Gửi sang Google |
+|---|---|
+| Địa chỉ thật | `"Tên công ty, địa chỉ"` → Maps hiện tên đọc được |
+| Địa chỉ chỉ là toạ độ | `lat,lng` → Maps hiện "Đã thả ghim" |
+
+Gửi chuỗi chữ nghĩa là **Google tự tìm lại địa điểm từ chữ đó**. Chữ đúng thì ra tên đẹp,
+chữ sai thì dẫn tài xế tới chỗ khác. Nên chỉ gửi chữ khi chữ đó đến từ nguồn đáng tin
+(mục 8). Thiếu dữ kiện thì luôn lùi về toạ độ: **một điểm đúng mà không tên vẫn hơn một
+cái tên dẫn sai chỗ**.
+
+Điểm đầu và cuối luôn gửi toạ độ — chúng đến từ GPS hoặc người dùng gõ, không có bản ghi
+công ty nào đứng sau.
+
+Toạ độ làm tròn 6 chữ số (~11cm) để URL không dính nhiễu dấu phẩy động.
+
+**Giới hạn waypoint**: `MAX_WAYPOINTS_PER_LINK = 8`. Vượt thì chia nhiều chặng, điểm cuối
+chặng trước là điểm đầu chặng sau, hiện nhiều nút "Mở chặng 1", "Mở chặng 2"…
 
 ## 7. Dữ liệu (Supabase)
 
-**Chỉ lưu thông tin công ty và liên hệ. KHÔNG lưu kết quả tối ưu tuyến.**
+**Chỉ lưu công ty và liên hệ. KHÔNG lưu kết quả tối ưu tuyến.**
 
-```sql
-create table public.companies (
-  id            uuid primary key default gen_random_uuid(),
-  user_id       uuid not null references auth.users(id) on delete cascade default auth.uid(),
-  display_name  text not null check (char_length(display_name) between 1 and 120),
-  address       text not null check (char_length(address) > 0),
-  lat           double precision not null check (lat between -90 and 90),
-  lng           double precision not null check (lng between -180 and 180),
-  note          text,
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
-);
+Schema đầy đủ: `supabase/migrations/`. Giải thích lý do: **[docs/database.md](docs/database.md)**.
 
-create table public.company_contacts (
-  id            uuid primary key default gen_random_uuid(),
-  company_id    uuid not null references public.companies(id) on delete cascade,
-  contact_name  text,            -- người liên hệ hoặc phòng ban
-  phone         text not null,
-  sort_order    int  not null default 0,
-  created_at    timestamptz not null default now()
-);
+Ba bảng: `profiles` (thông tin cơ bản lấy từ Google, tạo tự động bằng trigger khi đăng nhập
+lần đầu), `companies`, `company_contacts`.
 
-create index on public.companies (user_id);
-create index on public.company_contacts (company_id);
+Khác với bản đặc tả ban đầu:
+
+- `companies` có thêm cột **`is_public boolean not null default false`**.
+  Đặt tên `is_public` chứ không phải `public` vì `public` cũng là tên schema trong Postgres.
+- `company_contacts.phone` **cho phép NULL** (mục 5.3).
+
+### `is_public` công khai những gì
+
+> **Quyết định của chủ dự án: công khai TẤT CẢ.** `is_public = true` thì mọi người dùng đã
+> đăng nhập đọc được toàn bộ công ty đó, **kể cả số điện thoại và ghi chú nội bộ**.
+
+Rủi ro đã được nêu trước khi làm và chủ dự án vẫn chọn phương án này. Đây là **hành vi cố
+ý, không phải lỗi**. Muốn siết lại thì sửa đúng hai policy, xem `docs/database.md`.
+
+### RLS
+
+Bật trên cả ba bảng, không có policy nào cho vai trò `anon`.
+
+| Bảng | Đọc | Ghi |
+|---|---|---|
+| `profiles` | dòng của mình | dòng của mình; insert do trigger |
+| `companies` | của mình **hoặc** `is_public` | chỉ chủ sở hữu |
+| `company_contacts` | theo quyền đọc công ty cha | chỉ chủ sở hữu công ty cha |
+
+### Lưu công ty
+
+Qua RPC **`save_company`** — insert/update công ty và ghi lại toàn bộ danh sách liên hệ
+trong **một transaction**. Hàm **không** dùng `security definer`, nên RLS vẫn áp dụng đầy đủ.
+
+Hàm này hiện được định nghĩa ở migration `004`. Nếu cần sửa, viết migration mới và **xoá
+định nghĩa ở các migration cũ** — xem quy tắc 3.8.
+
+### Type TypeScript
+
+`src/types/database.ts` đang **viết tay** cho khớp migration. Có project rồi thì nên thay bằng:
+
+```bash
+npx supabase gen types typescript --project-id <ref> > src/types/database.ts
 ```
 
-- **Bật RLS cho cả 2 bảng.** Mỗi người chỉ đọc, ghi dữ liệu của chính mình:
-  - `companies`: `user_id = auth.uid()` cho select/insert/update/delete.
-  - `company_contacts`: chỉ khi `company_id` thuộc một công ty có `user_id = auth.uid()`.
-- Trigger tự cập nhật `updated_at`.
-- Lưu migration trong `supabase/migrations/` (dùng Supabase CLI), có file seed dữ liệu mẫu vài công ty ở TP.HCM để test.
-- Sinh type TypeScript từ schema (`supabase gen types`) vào `src/types/database.ts`.
-- Lưu công ty kèm danh sách liên hệ: thêm/sửa/xoá liên hệ cùng lúc khi bấm Lưu. Dùng một hàm Postgres (RPC) chạy trong transaction để không bị lưu dở dang.
+## 8. Vị trí (toạ độ) — KHÔNG DÙNG DỊCH VỤ GEOCODING
 
-## 8. Geocoding (địa chỉ → toạ độ)
+> Mục này đã thay đổi hoàn toàn so với bản đặc tả đầu. Trước đây dùng Nominatim
+> (OpenStreetMap) qua `/api/geocode`. **Đã gỡ bỏ toàn bộ.**
 
-Cần toạ độ cho điểm bắt đầu, điểm kết thúc và mọi công ty.
+Lý do: luồng thật của người dùng là **tìm địa điểm trên Google Maps trước rồi mới thêm vào
+app**. Link Google Maps đã chứa sẵn cả tên Google đặt cho chỗ đó lẫn toạ độ chính xác, nên
+một bộ geocoding thứ hai không thêm được gì mà lại tạo ra một cách để hai bên mâu thuẫn —
+và nó đã xảy ra: Nominatim tra ngược toạ độ của một công ty may ra tên một trường học gần
+đó, rồi chính cái tên sai ấy được gửi sang Google khi dẫn đường.
 
-- Tạo interface chung `Geocoder` trong `src/lib/geocoding/` để sau này đổi nhà cung cấp dễ dàng.
-- **MVP: dùng Nominatim (OpenStreetMap), miễn phí**, gọi qua route handler của Next.js (`/api/geocode`), không gọi thẳng từ trình duyệt:
-  - Tuân thủ chính sách dùng của Nominatim: tối đa 1 request/giây, gửi `User-Agent` định danh app, có cache kết quả.
-  - Giới hạn tìm trong Việt Nam (`countrycodes=vn`), ngôn ngữ `vi`.
-  - Debounce ô nhập (≥ 500ms), tối thiểu 4 ký tự mới tìm.
-- **Phương án dự phòng** (địa chỉ Việt Nam trên OSM đôi khi thiếu): cho phép người dùng **dán toạ độ** (`10.85, 106.77`) hoặc **dán link Google Maps** của địa điểm, app tự tách lat/lng ra.
-- Sau khi chọn địa chỉ, hiện toạ độ nhỏ bên dưới để người dùng biết đã có vị trí.
-- Ghi chú để sau: nếu cần chính xác hơn có thể đổi sang Google Places API (tốn phí, cần API key).
+Toàn bộ logic nằm ở `src/lib/geocoding/parse-location.ts`, chạy bằng regex **trong trình
+duyệt**, không gọi mạng. Test ở `parse-location.test.ts`.
 
-## 9. Lộ trình thực hiện
+| Người dùng nhập | Kết quả |
+|---|---|
+| Link `/maps/place/<tên>/@lat,lng` | Tên Google + toạ độ |
+| Link `/maps/@lat,lng` hoặc `?q=lat,lng` | Toạ độ |
+| `10.749046, 106.635174` (phẩy, chấm phẩy, hoặc space) | Toạ độ |
+| Link rút gọn `maps.app.goo.gl/...` | Báo lỗi, bảo mở ra lấy link đầy đủ |
+| Chữ thường | Giữ toạ độ đang có; chưa có thì không lưu được |
 
-| Giai đoạn           | Nội dung                                                                                                | Xong khi                                           |
-| ------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| **0. UI/UX**        | Hỏi câu hỏi mục 4, ghi `docs/design.md`, dựng 4 màn hình tĩnh                                           | Chủ dự án duyệt giao diện                          |
-| **1. Khởi tạo**     | Next.js + TS + Tailwind + lint/format, kết nối Supabase, `.env.example`, copy logo vào `public/brand/`  | `npm run dev` chạy, trang trắng có logo            |
-| **2. Đăng nhập**    | Google OAuth, callback, middleware, đăng xuất                                                           | Chưa đăng nhập thì không vào được trang nào        |
-| **3. Công ty**      | Migration + RLS, danh sách, tạo, sửa, xoá, liên hệ nhiều dòng, geocoding                                | Tạo được công ty có toạ độ, có nhiều số điện thoại |
-| **4. Tối ưu tuyến** | Module `route-optimizer` + test, trang chính, dialog chọn nhiều công ty, luồng tạo công ty rồi quay lại | Ra đúng thứ tự, test pass                          |
-| **5. Google Maps**  | `buildGoogleMapsLinks` + test, nút mở, chia chặng khi nhiều điểm                                        | Bấm nút mở đúng tuyến trên điện thoại              |
-| **6. Hoàn thiện**   | Trạng thái loading/lỗi/rỗng, kiểm tra trên điện thoại thật, deploy Vercel                               | Dùng được ngoài đường                              |
+Hai hành vi quan trọng:
 
-## 10. Cấu trúc thư mục gợi ý
+- **Dán link thì ô nhập đổi ngay thành tên/toạ độ**, không bao giờ giữ nguyên URL dài. Nếu
+  giữ, chính cái URL sẽ bị lưu làm địa chỉ.
+- **Sửa chữ không làm mất toạ độ.** Tên Google trả về thường dài, người dùng hay rút gọn
+  lại. Toạ độ chỉ mất khi xoá trắng ô.
+
+Nếu sau này cần tìm theo tên trong app, dùng **Google Places API** (tốn phí, cần key) —
+đừng quay lại Nominatim.
+
+## 9. Lộ trình
+
+| Giai đoạn | Nội dung | Trạng thái |
+|---|---|---|
+| **0. UI/UX** | design tokens, 4 màn hình | ✅ xong, đã duyệt |
+| **1. Khởi tạo** | Next + TS + Tailwind + lint/format, Supabase, `.env.example`, logo | ✅ xong |
+| **2. Đăng nhập** | Google OAuth, callback, middleware, đăng xuất | ✅ xong |
+| **3. Công ty** | Migration + RLS, CRUD, liên hệ nhiều dòng, nhập vị trí | ✅ xong |
+| **4. Tối ưu tuyến** | Module `route-optimizer` + test, trang chính | ✅ xong |
+| **5. Google Maps** | `buildGoogleMapsLinks` + test, chia chặng | ✅ xong |
+| **6. Hoàn thiện** | Trạng thái loading/lỗi/rỗng, kiểm tra trên điện thoại thật | ⏳ đang làm |
+
+Đã deploy: GitHub `tuquach090/beeRoute` → Vercel tự build khi push `main`.
+
+## 10. Cấu trúc thư mục
 
 ```
 src/
   app/
     login/page.tsx
-    auth/callback/route.ts
-    (app)/                 # nhóm route cần đăng nhập
-      layout.tsx           # thanh tab dưới đáy
-      page.tsx             # tối ưu tuyến
-      companies/
-        page.tsx
-        new/page.tsx
-        [id]/edit/page.tsx
-    api/geocode/route.ts
+    auth/callback/route.ts          đổi code lấy session
+    auth/signout/route.ts           POST
+    auth/auth-code-error/page.tsx
+    (app)/                          nhóm route sau đăng nhập
+      layout.tsx                    header + thanh tab + chặn session
+      page.tsx                      tối ưu tuyến
+      companies/page.tsx
+      companies/new/page.tsx
+      companies/[id]/edit/page.tsx
   components/
+    ui/                             shadcn, không sửa tay
+    route-form.tsx  company-form.tsx  company-picker-sheet.tsx
+    address-input.tsx  account-menu.tsx  bottom-tabs.tsx
+    logo.tsx  theme-script.tsx  theme-toggle.tsx  google-*.tsx
   lib/
-    supabase/              # client cho browser, server, middleware
-    route-optimizer/       # thuần TS + tests
-    google-maps/           # buildGoogleMapsLinks + tests
-    geocoding/
-    i18n/vi.ts
+    supabase/                       client / server / middleware / env
+    companies/                      queries.ts (đọc) + actions.ts (ghi)
+    route-optimizer/                thuần TS + test
+    google-maps/                    build-links + test
+    geocoding/                      parse-location + test (regex, không gọi mạng)
+    validation/                     zod schema + resolver tự viết + test
+    i18n/vi.ts                      toàn bộ chữ tiếng Việt
+    route-draft.ts                  sessionStorage store cho form tuyến
+    use-current-location.ts         Geolocation API
   types/database.ts
 middleware.ts
 supabase/migrations/
-docs/design.md
+scripts/check-contrast.mjs
+docs/design.md  docs/database.md
 ```
 
 ## 11. Biến môi trường (`.env.example`)
@@ -276,15 +339,22 @@ docs/design.md
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NOMINATIM_USER_AGENT=BeeRoute/0.1 (email-lien-he@example.com)
 ```
 
-Cấu hình Google OAuth thực hiện trong Supabase Dashboard (Authentication → Providers → Google) và Google Cloud Console. Ghi các bước vào `README.md` để chủ dự án tự làm.
+Chỉ hai biến. Không có key nào khác vì Supabase là dịch vụ ngoài duy nhất.
 
-## 12. Chưa làm ở MVP (để sau)
+Chỉ dùng key **anon public**. Key `service_role` bỏ qua mọi RLS — không bao giờ đặt vào
+biến có tiền tố `NEXT_PUBLIC_`.
+
+Cấu hình Google OAuth và các bước deploy: xem **[README.md](README.md)**.
+
+## 12. Chưa làm (để sau)
 
 - Đăng ký bằng email/mật khẩu.
+- Giao diện tìm và thêm công ty `is_public` của người khác (cờ đã có trong DB và RLS, chưa có màn hình).
 - Nhiều người dùng chung một công ty (multi-tenant), phân quyền điều phối/tài xế.
 - Lưu lịch sử các tuyến, thống kê, tính lương theo chuyến.
 - Khoảng cách theo đường thật (OSRM/Google Directions), giờ mở cửa, khung giờ giao.
-- Chế độ tối, PWA cài lên màn hình chính, dùng offline.
+- Seed dữ liệu mẫu (cần `user_id` thật nên phải có người đăng nhập trước).
+- PWA cài lên màn hình chính, dùng offline.
+- Bộ đếm ký tự cho ô "Tên hiển thị".

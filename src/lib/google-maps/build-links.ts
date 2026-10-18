@@ -141,3 +141,22 @@ function buildSingleLink(points: RoutePoint[], travelMode: TravelMode): string {
 
   return `${BASE}?${params.toString()}`;
 }
+
+/**
+ * Directions to a single stop, starting wherever the rider is now.
+ *
+ * Omitting `origin` is what makes Google Maps use the device's current
+ * location — it is not an oversight. Useful mid-route: open just the next
+ * stop instead of reloading the whole multi-waypoint route.
+ */
+export function buildSingleStopLink(
+  point: { location: LatLng; name?: string | null; address?: string | null },
+  travelMode: TravelMode = "two-wheeler",
+): string {
+  const params = new URLSearchParams({
+    api: "1",
+    destination: pointToParam(point),
+    travelmode: travelMode,
+  });
+  return `${BASE}?${params.toString()}`;
+}
