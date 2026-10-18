@@ -1,8 +1,9 @@
 import { isValidLatLng, type LatLng } from "./types";
 
 /**
- * Vietnamese addresses are patchy on OpenStreetMap, so the user can skip the
- * search entirely by pasting coordinates or a Google Maps link (CLAUDE.md §8).
+ * The only way a location enters the app: the user finds the place on Google
+ * Maps and pastes the link, or pastes a coordinate pair. No geocoding service
+ * is involved, so nothing can re-derive a location and disagree with Google.
  */
 
 const PLAIN_PAIR = /^\s*(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*$/;

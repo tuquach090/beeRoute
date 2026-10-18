@@ -1,21 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Loader2, MapPin, Search } from "lucide-react";
+import { Check, MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   formatLatLng,
   isMapsLink,
-  parseMapsPlaceName,
   isUnresolvedShortLink,
   parseLocationInput,
+  parseMapsPlaceName,
 } from "@/lib/geocoding/parse-location";
-import type { GeocodeResult, LatLng } from "@/lib/geocoding/types";
+import type { LatLng } from "@/lib/geocoding/types";
 import { vi } from "@/lib/i18n/vi";
-
-const DEBOUNCE_MS = 500;
-const MIN_QUERY_LENGTH = 4;
 
 type Props = {
   value: string;
@@ -26,6 +22,14 @@ type Props = {
   invalid?: boolean;
 };
 
+/**
+ * Locations come from Google Maps links; nothing here queries a geocoder.
+ *
+ * The real workflow is to find the place on Google Maps first and paste the
+ * link, so the link already carries both the name Google uses and the exact
+ * coordinates. Asking a second geocoder to re-derive either one only adds a
+ * way for the two to disagree.
+ */
 export function AddressInput({
   value,
   location,
@@ -34,138 +38,56 @@ export function AddressInput({
   id,
   invalid,
 }: Props) {
-  const [results, setResults] = useState<GeocodeResult[]>([]);
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
-  // Set when a suggestion is picked, so the effect does not turn around and
-  // search for the text it just wrote.
-  const justPicked = useRef(false);
-
-  // Classified during render — these are facts about `value`, not state.
   const text = value.trim();
-  const pastedLocation = parseLocationInput(text);
   const shortLink = isUnresolvedShortLink(text);
-  const shouldSearch =
-    !pastedLocation && !shortLink && text.length >= MIN_QUERY_LENGTH;
-  useEffect(() => {
-    if (!shouldSearch) return;
-    if (justPicked.current) {
-      justPicked.current = false;
-      return;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      setFetchError(null);
-      try {
-        const res = await fetch(`/api/geocode?q=${encodeURIComponent(text)}`, {
-          signal: controller.signal,
-        });
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error ?? vi.address.failed);
-        setResults(body.results ?? []);
-        setOpen(true);
-      } catch (e) {
-        if (controller.signal.aborted) return;
-        setFetchError(e instanceof Error ? e.message : vi.address.failed);
-        setResults([]);
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }, DEBOUNCE_MS);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [text, shouldSearch]);
 
   function handleInput(next: string) {
     const parsed = parseLocationInput(next);
 
-    // Collapse a pasted Maps URL to its coordinates straight away. Keeping the
-    // raw link in the field is unreadable, and it is what ends up saved as the
-    // address if the reverse lookup below never completes.
-    //
-    // Only for links: reformatting a coordinate pair while it is being typed
-    // by hand would fight the user.
     if (parsed && isMapsLink(next)) {
-      // Google's own name for the place beats anything a reverse lookup will
-      // guess from the coordinates. Only fall back to numbers without one.
-      const placeName = parseMapsPlaceName(next);
-      onChange(placeName ?? formatLatLng(parsed), parsed);
+      // Google's own name for the place, with its exact coordinates.
+      onChange(parseMapsPlaceName(next) ?? formatLatLng(parsed), parsed);
       return;
     }
 
-    onChange(next, parsed);
-  }
+    if (parsed) {
+      // Coordinates typed or pasted directly.
+      onChange(next, parsed);
+      return;
+    }
 
-  function pick(result: GeocodeResult) {
-    justPicked.current = true;
-    onChange(result.label, result.location);
-    setOpen(false);
-    setResults([]);
+    // Plain text. Keep the coordinates already attached, so the name can be
+    // shortened after pasting a link; emptying the field clears them.
+    onChange(next, next.trim() ? location : null);
   }
-
-  // Stale results must not show while the input no longer warrants a search.
-  const visibleResults = shouldSearch ? results : [];
-  const hint = shortLink
-    ? vi.address.shortLink
-    : shouldSearch && fetchError
-      ? fetchError
-      : vi.address.hint;
 
   return (
-    <div className="relative">
-      <div className="relative">
-        <Input
-          id={id}
-          value={value}
-          onChange={(e) => handleInput(e.target.value)}
-          onFocus={() => visibleResults.length > 0 && setOpen(true)}
-          placeholder={placeholder ?? vi.address.placeholder}
-          className={cn("h-12 pr-9", invalid && "border-destructive")}
-          autoComplete="off"
-        />
-        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground">
-          {loading && shouldSearch ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-          ) : (
-            <Search className="size-4" aria-hidden />
-          )}
-        </span>
-      </div>
-
-      {open && visibleResults.length > 0 && (
-        <ul
-          className="absolute z-40 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border bg-popover p-1 shadow-lg"
-          role="listbox"
-        >
-          {visibleResults.map((r) => (
-            <li key={r.id}>
-              <button
-                type="button"
-                onClick={() => pick(r)}
-                className="w-full rounded-lg px-3 py-2.5 text-left text-sm leading-5 hover:bg-muted"
-              >
-                {r.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div>
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => handleInput(e.target.value)}
+        placeholder={placeholder ?? vi.address.placeholder}
+        className={cn("h-12", invalid && "border-destructive")}
+        autoComplete="off"
+      />
 
       {location ? (
         <p className="bg-tint text-tint-foreground mt-2 flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs">
-          <MapPin className="size-3.5 shrink-0" aria-hidden />
+          <Check className="size-3.5 shrink-0" aria-hidden />
           <span className="font-medium">{vi.companyForm.coordinates}:</span>
           <span className="tnum font-mono">{formatLatLng(location)}</span>
         </p>
       ) : (
-        <p className="text-muted-foreground mt-2 text-xs">{hint}</p>
+        <p
+          className={cn(
+            "mt-2 flex gap-1.5 text-xs leading-5",
+            shortLink ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          {shortLink ? vi.address.shortLink : vi.address.hint}
+        </p>
       )}
     </div>
   );

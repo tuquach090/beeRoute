@@ -45,7 +45,7 @@ export const vi = {
     end: "Điểm kết thúc",
     useCurrentLocation: "Vị trí hiện tại",
     enterAddress: "Nhập địa chỉ",
-    addressPlaceholder: "Nhập địa chỉ, toạ độ hoặc dán link Google Maps",
+    addressPlaceholder: "Dán link Google Maps của địa điểm",
     destinations: "Các điểm đến",
     addDestination: "Thêm điểm đến",
     noDestinations: "Chưa chọn điểm đến nào.",
@@ -79,16 +79,15 @@ export const vi = {
   },
 
   address: {
-    placeholder: "Nhập địa chỉ, toạ độ hoặc dán link Google Maps",
-    hint: "Gõ ít nhất 4 ký tự để tìm, hoặc dán link Google Maps / toạ độ dạng 10.7769, 106.7009.",
-    failed: "Không tìm được địa chỉ. Thử lại hoặc dán toạ độ.",
+    placeholder: "Dán link Google Maps của địa điểm",
+    hint: "Tìm địa điểm trên Google Maps rồi dán link vào đây. Dán toạ độ dạng 10.749046, 106.635174 cũng được.",
     shortLink:
-      "Link rút gọn chưa có toạ độ. Mở link đó trên Google Maps rồi chép link đầy đủ trên thanh địa chỉ.",
+      "Link rút gọn chưa có toạ độ. Mở nó trên Google Maps rồi chép link đầy đủ trên thanh địa chỉ.",
   },
 
   geo: {
     unsupported:
-      "Trình duyệt này không hỗ trợ lấy vị trí. Nhập địa chỉ tay nhé.",
+      "Trình duyệt này không hỗ trợ lấy vị trí. Dán link Google Maps thay nhé.",
     denied:
       "Bạn đã từ chối quyền vị trí. Bật lại trong cài đặt trình duyệt, hoặc chuyển sang Nhập địa chỉ.",
     timeout: "Lấy vị trí quá lâu. Thử lại hoặc nhập địa chỉ tay.",
@@ -124,8 +123,8 @@ export const vi = {
     displayName: "Tên hiển thị",
     displayNamePlaceholder: "Ví dụ: Kho Tân Bình",
     address: "Địa chỉ",
-    addressPlaceholder: "Nhập địa chỉ, toạ độ hoặc dán link Google Maps",
-    addressHint: "Phải chọn được toạ độ thì mới lưu được.",
+    addressPlaceholder: "Dán link Google Maps của địa điểm",
+    addressHint: "Phải có toạ độ thì mới lưu được.",
     coordinates: "Toạ độ",
     contacts: "Liên hệ",
     contactsHint:

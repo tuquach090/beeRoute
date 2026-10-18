@@ -51,6 +51,9 @@ NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ```
 
+Chỉ cần hai biến này. App không gọi dịch vụ bản đồ nào khác — vị trí lấy từ
+link Google Maps bạn dán vào.
+
 Chỉ dùng key **anon public**. Key `service_role` bỏ qua mọi quy tắc RLS, không
 bao giờ đưa vào file có tiền tố `NEXT_PUBLIC_` (Next sẽ nhúng thẳng vào
 JavaScript gửi xuống trình duyệt).
