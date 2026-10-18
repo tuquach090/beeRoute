@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MAX_WAYPOINTS_PER_LINK, buildGoogleMapsLinks } from "./build-links";
+import {
+  MAX_WAYPOINTS_PER_LINK,
+  buildGoogleMapsLinks,
+  pointToParam,
+} from "./build-links";
 import type { Stop } from "@/lib/route-optimizer/types";
 
 const start = { lat: 10.7721, lng: 106.698 };
@@ -13,6 +17,10 @@ const stops = (n: number): Stop[] =>
   }));
 
 const params = (url: string) => new URL(url).searchParams;
+
+/** Mirrors the 6-decimal rounding build-links applies to coordinates. */
+const asCoord = (lat: number, lng: number) =>
+  `${Number(lat.toFixed(6))},${Number(lng.toFixed(6))}`;
 
 describe("buildGoogleMapsLinks", () => {
   it("builds a single link for a short route", () => {
@@ -95,9 +103,9 @@ describe("buildGoogleMapsLinks", () => {
     });
 
     const expected = [
-      `${start.lat},${start.lng}`,
-      ...list.map((s) => `${s.location.lat},${s.location.lng}`),
-      `${end.lat},${end.lng}`,
+      asCoord(start.lat, start.lng),
+      ...list.map((s) => asCoord(s.location.lat, s.location.lng)),
+      asCoord(end.lat, end.lng),
     ];
     expect(seen).toEqual(expected);
   });
@@ -111,5 +119,81 @@ describe("buildGoogleMapsLinks", () => {
     const legs = buildGoogleMapsLinks({ orderedStops: [] }, start, end);
     expect(legs).toHaveLength(1);
     expect(params(legs[0].url).get("waypoints")).toBeNull();
+  });
+});
+
+describe("pointToParam — readable labels vs coordinates", () => {
+  const loc = { lat: 10.7909, lng: 106.6533 };
+
+  it("sends name + address when the address is a real address", () => {
+    expect(
+      pointToParam({
+        location: loc,
+        name: "Kho Tân Bình",
+        address: "285 Cách Mạng Tháng 8, Tân Bình, TP.HCM",
+      }),
+    ).toBe("Kho Tân Bình, 285 Cách Mạng Tháng 8, Tân Bình, TP.HCM");
+  });
+
+  it("falls back to coordinates when the address is just coordinates", () => {
+    // Matches the companies saved before reverse geocoding existed.
+    expect(
+      pointToParam({
+        location: loc,
+        name: "Lạc Tỷ",
+        address: "10.739866, 106.614413",
+      }),
+    ).toBe("10.7909,106.6533");
+  });
+
+  it("falls back to coordinates when there is no address", () => {
+    expect(pointToParam({ location: loc, name: "Kho Tân Bình" })).toBe(
+      "10.7909,106.6533",
+    );
+    expect(pointToParam({ location: loc })).toBe("10.7909,106.6533");
+  });
+
+  it("uses the address alone when the name is missing", () => {
+    expect(
+      pointToParam({ location: loc, address: "285 Cách Mạng Tháng 8" }),
+    ).toBe("285 Cách Mạng Tháng 8");
+  });
+});
+
+describe("buildGoogleMapsLinks — labelled stops", () => {
+  it("labels stops that have an address, and keeps endpoints as coordinates", () => {
+    const list: Stop[] = [
+      { id: "a", label: "Kho Tân Bình", location: { lat: 10.79, lng: 106.65 } },
+      { id: "b", label: "Lạc Tỷ", location: { lat: 10.73, lng: 106.61 } },
+    ];
+    const labels = new Map([
+      ["a", { name: "Kho Tân Bình", address: "285 Cách Mạng Tháng 8, TP.HCM" }],
+      // Address is still a raw coordinate pair.
+      ["b", { name: "Lạc Tỷ", address: "10.739866, 106.614413" }],
+    ]);
+
+    const legs = buildGoogleMapsLinks(
+      { orderedStops: list },
+      start,
+      end,
+      "two-wheeler",
+      labels,
+    );
+    const wp = params(legs[0].url).get("waypoints")!.split("|");
+
+    expect(wp[0]).toBe("Kho Tân Bình, 285 Cách Mạng Tháng 8, TP.HCM");
+    expect(wp[1]).toBe("10.73,106.61");
+
+    // Start and end have no company record behind them.
+    expect(params(legs[0].url).get("origin")).toBe("10.7721,106.698");
+    expect(params(legs[0].url).get("destination")).toBe("10.7626,106.6601");
+  });
+
+  it("still uses coordinates everywhere when no labels are supplied", () => {
+    const legs = buildGoogleMapsLinks({ orderedStops: stops(2) }, start, end);
+    // Float noise (106.71000000000001) must not reach the URL.
+    expect(params(legs[0].url).get("waypoints")).toBe(
+      "10.78,106.7|10.79,106.71",
+    );
   });
 });

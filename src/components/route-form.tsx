@@ -35,6 +35,7 @@ import type { OptimizeResult } from "@/lib/route-optimizer/types";
 import {
   buildGoogleMapsLinks,
   type RouteLeg,
+  type StopLabel,
 } from "@/lib/google-maps/build-links";
 
 type Props = {
@@ -118,9 +119,24 @@ export function RouteForm({ companies, addedId }: Props) {
         })),
       });
 
+      // Give Maps the company name and address so each stop shows a real
+      // label instead of "Đã thả ghim".
+      const labels = new Map<string, StopLabel>(
+        selected.map((c) => [
+          c.id,
+          { name: c.display_name, address: c.address },
+        ]),
+      );
+
       setComputed({
         result,
-        links: buildGoogleMapsLinks(result, start, end, draft.travelMode),
+        links: buildGoogleMapsLinks(
+          result,
+          start,
+          end,
+          draft.travelMode,
+          labels,
+        ),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : vi.route.errorGeneric);
