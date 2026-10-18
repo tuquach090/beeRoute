@@ -1,0 +1,8 @@
+.next
+node_modules
+package-lock.json
+public/brand
+
+# Markdown is hand-written prose and spec. Prettier pads table columns, which
+# adds noise to diffs without making anything more readable.
+*.md

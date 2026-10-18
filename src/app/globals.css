@@ -1,26 +1,138 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------------------
+   BeeRoute design tokens. Decisions and rationale live in docs/design.md.
+   Every text pair below is verified by `npm run check:contrast`.
+   --------------------------------------------------------------------------- */
 
 @theme inline {
+  /* Brand constants — the same value in both themes. */
+  --color-brand: #2f5bea;
+  --color-brand-light: #7d9bff;
+  --color-honey: #ffc21a;
+  --color-ink: #1c1a17;
+  --color-tint: var(--tint);
+  --color-tint-foreground: var(--tint-foreground);
+
+  /* Semantic surfaces — these flip between light and dark. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-be-vietnam-pro);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-be-vietnam-pro);
+
+  /* "Thẻ bo góc lớn" — larger than the shadcn default of 0.625rem. */
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.25);
+  --radius-2xl: calc(var(--radius) * 1.5);
+  --radius-3xl: calc(var(--radius) * 2);
+
+  /* Thumb-reach sizes from the UI/UX answers: primary action >= 52px. */
+  --spacing-action: 3.25rem;
+  --spacing-tabbar: 4rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 1rem;
+
+  --background: #f4f7fe;
+  --foreground: #1c1a17;
+  --card: #ffffff;
+  --card-foreground: #1c1a17;
+  --popover: #ffffff;
+  --popover-foreground: #1c1a17;
+
+  --primary: #2f5bea;
+  --primary-foreground: #ffffff;
+  --secondary: #e8f0ff;
+  --secondary-foreground: #1b3ba8;
+  --muted: #eef2fa;
+  --muted-foreground: #5a6479;
+
+  /* Honey is an accent only. White on honey fails 4.5:1 — always ink on honey. */
+  --accent: #ffc21a;
+  --accent-foreground: #1c1a17;
+
+  --destructive: #d92d20;
+  --destructive-foreground: #ffffff;
+
+  --tint: #e8f0ff;
+  --tint-foreground: #1b3ba8;
+
+  /* --border is decorative (card edges); --input outlines form fields and so
+     must clear the 3:1 non-text contrast bar on its own. */
+  --border: #dce3f2;
+  --input: #878fa3;
+  --ring: #2f5bea;
+}
+
+.dark {
+  --background: #101218;
+  --foreground: #eceff6;
+  --card: #181b23;
+  --card-foreground: #eceff6;
+  --popover: #181b23;
+  --popover-foreground: #eceff6;
+
+  --primary: #3f66f0;
+  --primary-foreground: #ffffff;
+  --secondary: #1e2536;
+  --secondary-foreground: #c9d6ff;
+  --muted: #1e2230;
+  --muted-foreground: #98a2b8;
+
+  --accent: #ffc21a;
+  --accent-foreground: #1c1a17;
+
+  --destructive: #f0584b;
+  --destructive-foreground: #1c1a17;
+
+  --tint: #1e2536;
+  --tint-foreground: #c9d6ff;
+
+  --border: #272c3a;
+  --input: #5c677e;
+  --ring: #7d9bff;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+    /* Keep iOS from zooming the viewport when a field takes focus. */
+    -webkit-text-size-adjust: 100%;
+  }
+  /* Distances and coordinates line up in columns. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
 }

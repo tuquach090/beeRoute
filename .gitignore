@@ -32,6 +32,11 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the template must be committed (CLAUDE.md §3.5).
+!.env.example
+
+# OAuth client secret files downloaded from Google Cloud Console
+client_secret*.json
 
 # vercel
 .vercel
