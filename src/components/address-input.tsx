@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   formatLatLng,
   isMapsLink,
-  isRawLocationText,
+  parseMapsPlaceName,
   isUnresolvedShortLink,
   parseLocationInput,
 } from "@/lib/geocoding/parse-location";
@@ -49,41 +49,6 @@ export function AddressInput({
   const shortLink = isUnresolvedShortLink(text);
   const shouldSearch =
     !pastedLocation && !shortLink && text.length >= MIN_QUERY_LENGTH;
-  // A pasted URL or coordinate pair locates the place but reads as noise in a
-  // list, so look up a human address to replace it with.
-  const shouldReverse = Boolean(pastedLocation) && isRawLocationText(text);
-
-  useEffect(() => {
-    if (!shouldReverse || !pastedLocation) return;
-
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(
-          `/api/geocode?lat=${pastedLocation.lat}&lng=${pastedLocation.lng}`,
-          { signal: controller.signal },
-        );
-        const body = await res.json();
-        // Replacing the text stops shouldReverse matching, so this settles
-        // after one pass instead of looping.
-        if (res.ok && body.label) onChange(body.label, pastedLocation);
-      } catch {
-        // Keep whatever the user pasted; the coordinates are already correct.
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }, DEBOUNCE_MS);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-    // onChange is rebuilt by callers on every render; depending on it would
-    // restart the lookup continuously.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldReverse, pastedLocation?.lat, pastedLocation?.lng]);
-
   useEffect(() => {
     if (!shouldSearch) return;
     if (justPicked.current) {
@@ -128,7 +93,10 @@ export function AddressInput({
     // Only for links: reformatting a coordinate pair while it is being typed
     // by hand would fight the user.
     if (parsed && isMapsLink(next)) {
-      onChange(formatLatLng(parsed), parsed);
+      // Google's own name for the place beats anything a reverse lookup will
+      // guess from the coordinates. Only fall back to numbers without one.
+      const placeName = parseMapsPlaceName(next);
+      onChange(placeName ?? formatLatLng(parsed), parsed);
       return;
     }
 
@@ -163,7 +131,7 @@ export function AddressInput({
           autoComplete="off"
         />
         <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground">
-          {loading && (shouldSearch || shouldReverse) ? (
+          {loading && shouldSearch ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : (
             <Search className="size-4" aria-hidden />

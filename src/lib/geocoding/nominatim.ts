@@ -1,7 +1,6 @@
 import type { GeocodeResult } from "./types";
 
 const SEARCH_ENDPOINT = "https://nominatim.openstreetmap.org/search";
-const REVERSE_ENDPOINT = "https://nominatim.openstreetmap.org/reverse";
 
 /** Nominatim's usage policy allows at most one request per second. */
 const MIN_INTERVAL_MS = 1000;
@@ -97,47 +96,4 @@ export async function searchNominatim(
 
   writeCache(key, results);
   return results;
-}
-
-/**
- * Coordinates → a readable address.
- *
- * Used when the user pastes a Google Maps link or raw coordinates: the numbers
- * locate the place correctly but read as noise in a list of companies.
- */
-export async function reverseNominatim(
-  lat: number,
-  lng: number,
-  signal?: AbortSignal,
-): Promise<string | null> {
-  const key = `rev:${lat.toFixed(6)},${lng.toFixed(6)}`;
-  const cached = readCache(key);
-  if (cached) return cached[0]?.label ?? null;
-
-  const url = new URL(REVERSE_ENDPOINT);
-  url.searchParams.set("lat", String(lat));
-  url.searchParams.set("lon", String(lng));
-  url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("accept-language", "vi");
-  // Street-level detail; the full building-level name is usually too long.
-  url.searchParams.set("zoom", "18");
-
-  const label = await throttle(async () => {
-    const res = await fetch(url, {
-      signal,
-      headers: {
-        "User-Agent":
-          process.env.NOMINATIM_USER_AGENT ?? "BeeRoute/0.1 (unconfigured)",
-        "Accept-Language": "vi",
-      },
-    });
-    if (!res.ok) throw new Error(`Nominatim trả về ${res.status}`);
-    const body = (await res.json()) as { display_name?: string };
-    return body.display_name ?? null;
-  });
-
-  if (label) {
-    writeCache(key, [{ id: key, label, location: { lat, lng } }]);
-  }
-  return label;
 }

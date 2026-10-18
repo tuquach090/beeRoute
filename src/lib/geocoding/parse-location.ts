@@ -69,6 +69,30 @@ export function formatLatLng({ lat, lng }: LatLng): string {
   return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 }
 
+/**
+ * Pulls the place name out of a Google Maps link.
+ *
+ * A /maps/place/ URL already carries Google's own name for the spot, which is
+ * both more accurate and more recognisable than anything a reverse geocoder
+ * will produce from the coordinates alone. Using it avoids a network call and,
+ * more importantly, avoids replacing a correct name with a wrong one.
+ */
+export function parseMapsPlaceName(raw: string): string | null {
+  const match = raw.trim().match(/\/maps\/place\/([^/@?]+)/);
+  if (!match) return null;
+
+  try {
+    // Google encodes spaces as "+" inside the path segment.
+    const decoded = decodeURIComponent(match[1].replace(/\+/g, " ")).trim();
+    // A coordinate-only /place/ segment tells us nothing a name would.
+    if (!decoded || PLAIN_PAIR.test(decoded)) return null;
+    return decoded;
+  } catch {
+    // Malformed percent-encoding; fall back to coordinates.
+    return null;
+  }
+}
+
 /** True for a URL, as opposed to a bare coordinate pair or a typed address. */
 export function isMapsLink(raw: string): boolean {
   const text = raw.trim();

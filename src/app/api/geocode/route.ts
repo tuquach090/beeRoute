@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { reverseNominatim, searchNominatim } from "@/lib/geocoding/nominatim";
+import { searchNominatim } from "@/lib/geocoding/nominatim";
 
 export const runtime = "nodejs";
 
@@ -20,33 +20,6 @@ export async function GET(request: NextRequest) {
   }
 
   const sp = request.nextUrl.searchParams;
-
-  // Reverse lookup: ?lat=&lng= instead of ?q=
-  const latRaw = sp.get("lat");
-  const lngRaw = sp.get("lng");
-  if (latRaw !== null && lngRaw !== null) {
-    const lat = Number(latRaw);
-    const lng = Number(lngRaw);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return NextResponse.json(
-        { error: "Toạ độ không hợp lệ" },
-        { status: 400 },
-      );
-    }
-    try {
-      const label = await reverseNominatim(lat, lng, request.signal);
-      return NextResponse.json({ label });
-    } catch (error) {
-      if (request.signal.aborted) return NextResponse.json({ label: null });
-      return NextResponse.json(
-        {
-          error:
-            error instanceof Error ? error.message : "Không tra được địa chỉ",
-        },
-        { status: 502 },
-      );
-    }
-  }
 
   const q = sp.get("q")?.trim() ?? "";
 

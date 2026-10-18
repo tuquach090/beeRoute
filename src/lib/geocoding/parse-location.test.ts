@@ -5,6 +5,7 @@ import {
   isRawLocationText,
   isUnresolvedShortLink,
   parseLocationInput,
+  parseMapsPlaceName,
 } from "./parse-location";
 
 /** The link that exposed the "long URL saved as the address" bug. */
@@ -114,5 +115,73 @@ describe("pasting a link collapses to coordinates", () => {
   it("leaves an unresolvable short link alone, so the user sees the warning", () => {
     const short = "https://maps.app.goo.gl/abc123";
     expect(fieldValueAfterPaste(short)).toBe(short);
+  });
+});
+
+/** The exact link that produced a wrong "school" label via reverse geocoding. */
+const THUAN_PHUONG =
+  "https://www.google.com/maps/place/T%E1%BA%ADp+%C4%91o%C3%A0n+May+th%C3%AAu+Thu%E1%BA%ADn+Ph%C6%B0%C6%A1ng/@10.7490456,106.6351744,17z/data=!3m1!4b1!4m6!3m5!1s0x31752e7e00770acf:0x55930245be0450c0!8m2!3d10.7490456!4d106.6351744!16s%2Fg%2F11c4l7ghgx?entry=ttu&g_ep=EgoyMDI2MTAxMy4wIKXMDSoASAFQAw%3D%3D";
+
+describe("parseMapsPlaceName", () => {
+  it("reads the Vietnamese place name out of the real link", () => {
+    expect(parseMapsPlaceName(THUAN_PHUONG)).toBe(
+      "Tập đoàn May thêu Thuận Phương",
+    );
+  });
+
+  it("still reads the exact coordinates from the same link", () => {
+    expect(parseLocationInput(THUAN_PHUONG)).toEqual({
+      lat: 10.7490456,
+      lng: 106.6351744,
+    });
+  });
+
+  it("returns null for a link with no /place/ segment", () => {
+    expect(
+      parseMapsPlaceName("https://www.google.com/maps/@10.7769,106.7009,17z"),
+    ).toBeNull();
+    expect(
+      parseMapsPlaceName("https://maps.google.com/?q=10.7769,106.7009"),
+    ).toBeNull();
+  });
+
+  it("returns null when the place segment is itself coordinates", () => {
+    expect(
+      parseMapsPlaceName(
+        "https://www.google.com/maps/place/10.7769,106.7009/@10.7769,106.7009,17z",
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null for a plain address or coordinates", () => {
+    expect(parseMapsPlaceName("285 Cách Mạng Tháng 8")).toBeNull();
+    expect(parseMapsPlaceName("10.7769, 106.7009")).toBeNull();
+  });
+});
+
+describe("pasting a /place/ link keeps Google's name", () => {
+  /** Mirrors AddressInput.handleInput after the place-name change. */
+  function fieldValueAfterPaste(input: string): string {
+    const parsed = parseLocationInput(input);
+    if (parsed && isMapsLink(input)) {
+      return parseMapsPlaceName(input) ?? formatLatLng(parsed);
+    }
+    return input;
+  }
+
+  it("uses the place name, not coordinates, and never the raw URL", () => {
+    const value = fieldValueAfterPaste(THUAN_PHUONG);
+    expect(value).toBe("Tập đoàn May thêu Thuận Phương");
+    expect(value).not.toContain("http");
+  });
+
+  it("falls back to coordinates for a link without a place name", () => {
+    expect(
+      fieldValueAfterPaste("https://www.google.com/maps/@10.7769,106.7009,17z"),
+    ).toBe("10.776900, 106.700900");
+  });
+
+  it("a name is not raw text, so no reverse lookup is triggered", () => {
+    expect(isRawLocationText("Tập đoàn May thêu Thuận Phương")).toBe(false);
   });
 });

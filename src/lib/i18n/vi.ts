@@ -80,7 +80,7 @@ export const vi = {
 
   address: {
     placeholder: "Nhập địa chỉ, toạ độ hoặc dán link Google Maps",
-    hint: "Gõ ít nhất 4 ký tự để tìm, hoặc dán toạ độ dạng 10.7769, 106.7009.",
+    hint: "Gõ ít nhất 4 ký tự để tìm, hoặc dán link Google Maps / toạ độ dạng 10.7769, 106.7009.",
     failed: "Không tìm được địa chỉ. Thử lại hoặc dán toạ độ.",
     shortLink:
       "Link rút gọn chưa có toạ độ. Mở link đó trên Google Maps rồi chép link đầy đủ trên thanh địa chỉ.",
