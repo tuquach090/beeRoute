@@ -13,6 +13,14 @@ export type RouteDraft = {
   endLocation: LatLng | null;
   selectedIds: string[];
   travelMode: TravelMode;
+  /**
+   * company id → the trip_stops row that already exists for it.
+   *
+   * Sent back on save so a re-optimise updates those rows instead of replacing
+   * them, which is what keeps their photos and delivery notes alive. Empty
+   * when building an ad-hoc route.
+   */
+  stopIdByCompanyId: Record<string, string>;
 };
 
 export const EMPTY_DRAFT: RouteDraft = {
@@ -24,59 +32,74 @@ export const EMPTY_DRAFT: RouteDraft = {
   endLocation: null,
   selectedIds: [],
   travelMode: "two-wheeler",
+  stopIdByCompanyId: {},
 };
 
-const STORAGE_KEY = "beeroute-route-draft";
+export const AD_HOC_KEY = "beeroute-route-draft";
+
+/** One namespace per trip, so editing never clobbers the ad-hoc route. */
+export function tripDraftKey(tripId: string) {
+  return `beeroute-trip-draft:${tripId}`;
+}
+
+export type DraftStore = {
+  subscribe: (onChange: () => void) => () => void;
+  getSnapshot: () => RouteDraft;
+  getServerSnapshot: () => RouteDraft;
+  write: (next: RouteDraft) => void;
+};
 
 /**
- * sessionStorage treated as an external store, so the route form can read it
- * with useSyncExternalStore instead of restoring it with setState in an effect.
+ * sessionStorage treated as an external store, so the route form reads it with
+ * useSyncExternalStore instead of restoring it with setState in an effect.
  * It survives the trip to "create company" and back (CLAUDE.md §5.2).
+ *
+ * One store per key: useSyncExternalStore compares snapshots by reference, so
+ * each namespace needs its own cache or two forms would hand each other stale
+ * objects.
  */
+export function createDraftStore(storageKey: string): DraftStore {
+  const listeners = new Set<() => void>();
+  let cachedRaw: string | null = null;
+  let cachedDraft: RouteDraft = EMPTY_DRAFT;
 
-const listeners = new Set<() => void>();
+  function getSnapshot(): RouteDraft {
+    let raw: string | null;
+    try {
+      raw = sessionStorage.getItem(storageKey);
+    } catch {
+      return EMPTY_DRAFT;
+    }
 
-// useSyncExternalStore compares snapshots by reference, so the parsed object
-// must be cached until the underlying string actually changes.
-let cachedRaw: string | null = null;
-let cachedDraft: RouteDraft = EMPTY_DRAFT;
+    if (raw !== cachedRaw) {
+      cachedRaw = raw;
+      cachedDraft = parse(raw);
+    }
+    return cachedDraft;
+  }
 
-export function subscribe(onChange: () => void) {
-  listeners.add(onChange);
-  return () => {
-    listeners.delete(onChange);
+  return {
+    subscribe(onChange) {
+      listeners.add(onChange);
+      return () => {
+        listeners.delete(onChange);
+      };
+    },
+    getSnapshot,
+    /** No sessionStorage during SSR; the first client snapshot fills it in. */
+    getServerSnapshot: () => EMPTY_DRAFT,
+    write(next) {
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {
+        // Private mode: the draft simply will not survive navigation.
+      }
+      for (const listener of listeners) listener();
+    },
   };
 }
 
-export function getSnapshot(): RouteDraft {
-  let raw: string | null;
-  try {
-    raw = sessionStorage.getItem(STORAGE_KEY);
-  } catch {
-    return EMPTY_DRAFT;
-  }
-
-  if (raw !== cachedRaw) {
-    cachedRaw = raw;
-    cachedDraft = parse(raw);
-  }
-  return cachedDraft;
-}
-
-/** No sessionStorage during SSR; the first client snapshot fills it in. */
-export function getServerSnapshot(): RouteDraft {
-  return EMPTY_DRAFT;
-}
-
-export function writeDraft(next: RouteDraft) {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // Private mode: the draft simply will not survive navigation.
-  }
-  for (const listener of listeners) listener();
-}
-
+/** Spreading over EMPTY_DRAFT keeps drafts written by older builds working. */
 function parse(raw: string | null): RouteDraft {
   if (!raw) return EMPTY_DRAFT;
   try {
@@ -84,4 +107,16 @@ function parse(raw: string | null): RouteDraft {
   } catch {
     return EMPTY_DRAFT;
   }
+}
+
+const stores = new Map<string, DraftStore>();
+
+/** Stores are cached so repeated renders keep the same snapshot identity. */
+export function draftStoreFor(storageKey: string): DraftStore {
+  let store = stores.get(storageKey);
+  if (!store) {
+    store = createDraftStore(storageKey);
+    stores.set(storageKey, store);
+  }
+  return store;
 }

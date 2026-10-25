@@ -14,7 +14,9 @@ export const vi = {
   },
 
   nav: {
+    label: "Điều hướng chính",
     route: "Tuyến đường",
+    trips: "Lịch chuyến",
     companies: "Công ty",
   },
 
@@ -148,6 +150,99 @@ export const vi = {
     save: "Lưu",
     cancel: "Huỷ",
     delete: "Xoá công ty",
+  },
+
+  calendar: {
+    weekdays: ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
+    months: [
+      "Tháng 1",
+      "Tháng 2",
+      "Tháng 3",
+      "Tháng 4",
+      "Tháng 5",
+      "Tháng 6",
+      "Tháng 7",
+      "Tháng 8",
+      "Tháng 9",
+      "Tháng 10",
+      "Tháng 11",
+      "Tháng 12",
+    ],
+    monthYear: (month: string, year: number) => `${month} ${year}`,
+    prevMonth: "Tháng trước",
+    nextMonth: "Tháng sau",
+    today: "Hôm nay",
+  },
+
+  trips: {
+    title: "Lịch chuyến",
+    morning: "Sáng",
+    afternoon: "Chiều",
+    mainTrip: "Chuyến chính",
+    extraTrips: "Chuyến phụ",
+    noTripThisSlot: "Chưa có chuyến",
+    createHere: "Tạo chuyến",
+    stopCount: (n: number) => `${n} điểm`,
+    straightKm: (km: string) => `${km} km chim bay`,
+    openTrip: "Xem chuyến",
+    pickADay: "Chọn một ngày để xem chuyến.",
+    delete: "Xoá chuyến",
+    deleteConfirmTitle: "Xoá chuyến này?",
+    deleteConfirmBody:
+      "Xoá cả thứ tự điểm và toàn bộ ảnh chứng từ đã chụp. Không khôi phục được.",
+  },
+
+  tripDetail: {
+    edit: "Sửa tuyến",
+    editCompany: "Sửa thông tin công ty",
+    delivered: "Đã giao",
+    markDelivered: "Đánh dấu đã giao",
+    deliveredAt: (time: string) => `Đã giao lúc ${time}`,
+    sample: "Lấy mẫu",
+    sampleHint: "Bật khi điểm này có lấy mẫu mang về.",
+    stopNote: "Ghi chú giao hàng",
+    stopNotePlaceholder: "Ghi lại việc đã làm ở điểm này…",
+    companyGone:
+      "Công ty này đã bị xoá. Thông tin bên dưới là bản lưu lúc chạy chuyến.",
+  },
+
+  photos: {
+    title: "Ảnh chứng từ",
+    take: "Chụp ảnh",
+    pick: "Chọn từ thư viện",
+    kinds: {
+      order: "Đơn hàng",
+      receipt: "Phiếu biên nhận",
+      warehouse: "Phiếu xuất kho",
+      sample: "Mẫu",
+    },
+    kindLabel: "Loại ảnh",
+    empty: "Chưa có ảnh nào.",
+    uploading: "Đang tải lên…",
+    compressing: "Đang nén ảnh…",
+    compressed: (from: string, to: string) => `Đã nén ${from} → ${to}`,
+    failed: "Tải ảnh lên không thành công.",
+    retry: "Thử lại",
+    delete: "Xoá ảnh",
+    expired: "Tải lại trang để xem ảnh.",
+    limit: (n: number) => `Mỗi điểm tối đa ${n} ảnh.`,
+    takenAt: (time: string) => `Chụp lúc ${time}`,
+  },
+
+  saveTrip: {
+    finish: "Hoàn tất",
+    title: "Lưu thành chuyến",
+    description: "Chọn ngày và buổi cho chuyến này.",
+    date: "Ngày",
+    slot: "Buổi",
+    save: "Lưu chuyến",
+    saving: "Đang lưu…",
+    savedMain: (slot: string) => `Đã lưu vào chuyến chính buổi ${slot}`,
+    savedExtra: (slot: string) => `Đã lưu vào chuyến phụ buổi ${slot}`,
+    update: "Lưu thay đổi",
+    reoptimiseFirst: "Bấm Tối ưu tuyến trước khi lưu.",
+    dropWarning: (names: string, photos: number) =>
+      `Bỏ ${names} khỏi chuyến sẽ xoá ${photos} ảnh đã chụp.`,
   },
 
   common: {

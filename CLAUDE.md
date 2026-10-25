@@ -30,6 +30,7 @@
 Không thêm thư viện ngoài danh sách này nếu chưa hỏi chủ dự án.
 
 **Supabase là dịch vụ ngoài duy nhất.** Không gọi API bản đồ, geocoding hay gì khác.
+Dùng cả Auth, Postgres và **Storage** (ảnh chứng từ giao hàng).
 
 Hai chỗ lệch so với cách làm thông thường, có lý do:
 
@@ -45,7 +46,9 @@ Hai chỗ lệch so với cách làm thông thường, có lý do:
 
 1. **Làm theo đúng thứ tự giai đoạn** ở mục 9. Không nhảy sang giai đoạn sau khi giai đoạn trước chưa được chủ dự án xác nhận.
 2. Mỗi giai đoạn xong: tóm tắt ngắn đã làm gì, cách chạy thử, và những gì còn thiếu.
-3. Không tự ý lưu kết quả tối ưu tuyến vào database (xem mục 7).
+3. Kết quả tối ưu **được** lưu vào database dưới dạng **chuyến** (mục 7). Quy tắc cũ
+   cấm việc này; chủ dự án đã gỡ ngày 25/10/2026. Vẫn giữ nguyên tinh thần ban đầu:
+   không tự ý thêm bảng mới khi chưa hỏi.
 4. Không commit file `.env*` hay key bí mật. Có file `.env.example` liệt kê đủ biến.
 5. Code, tên biến, tên file bằng **tiếng Anh**. Chữ hiển thị trên giao diện bằng **tiếng Việt**, gom hết vào `src/lib/i18n/vi.ts`.
 6. Có gì chưa rõ thì **hỏi**, đừng đoán ở những chỗ ảnh hưởng tới dữ liệu hoặc luồng chính.
@@ -204,7 +207,11 @@ chặng trước là điểm đầu chặng sau, hiện nhiều nút "Mở chặ
 
 ## 7. Dữ liệu (Supabase)
 
-**Chỉ lưu công ty và liên hệ. KHÔNG lưu kết quả tối ưu tuyến.**
+Sáu bảng: `profiles`, `companies`, `company_contacts`, và từ 25/10/2026 thêm
+`trips`, `trip_stops`, `trip_stop_photos`.
+
+> **Thay đổi so với bản đặc tả đầu:** trước đây mục này ghi *"KHÔNG lưu kết quả tối ưu
+> tuyến"*. Chủ dự án đã gỡ để tra cứu được lịch sử và đính kèm ảnh chứng từ.
 
 Schema đầy đủ: `supabase/migrations/`. Giải thích lý do: **[docs/database.md](docs/database.md)**.
 
@@ -242,6 +249,57 @@ trong **một transaction**. Hàm **không** dùng `security definer`, nên RLS 
 
 Hàm này hiện được định nghĩa ở migration `004`. Nếu cần sửa, viết migration mới và **xoá
 định nghĩa ở các migration cũ** — xem quy tắc 3.8.
+
+### Chuyến (`trips`, `trip_stops`, `trip_stop_photos`)
+
+Migration `20261025000001_trips.sql`. **Chỉ chủ sở hữu đọc được — không có nhánh
+`or is_public` ở đâu cả.** Công ty có thể công khai, nhưng việc bạn ghé đó sáng thứ Ba
+thì không.
+
+Ba chi tiết cố ý:
+
+- **`trip_date` là `date`, không phải `timestamptz`.** Postgres `now()` và `new Date()`
+  trên Vercel đều chạy UTC; từ 0h đến 7h giờ Việt Nam chúng báo **hôm qua**. Mọi câu
+  hỏi "hôm nay là ngày nào" đi qua `todayInVn()` trong `src/lib/dates/vn-date.ts`, đó là
+  nơi duy nhất trong codebase dùng `Intl` cho múi giờ.
+- **`total_straight_km`**, không phải `total_km` — giữ cảnh báo của mục 6.2 ngay trong
+  tên cột, kẻo người sau đọc nhầm thành quãng đường thật.
+- **`trip_stops` snapshot** tên/địa chỉ/toạ độ. `company_id` là `on delete set null`, nên
+  xoá công ty không làm mất điểm trong chuyến cũ. Nhưng **số điện thoại đọc sống** từ
+  `companies` — tài xế đứng ở cổng cần số của hôm nay, không phải số ba tháng trước.
+
+### RPC `save_trip` — khác `save_company` một điểm sống còn
+
+`save_company` xoá sạch con rồi chèn lại. **`save_trip` không được làm vậy**: tối ưu lại
+tuyến sẽ xoá sạch ảnh chứng từ.
+
+Client gửi kèm `stop_id` của từng điểm (null = điểm mới). Hàm cập nhật điểm cũ tại chỗ,
+**không đụng** `delivered_at`, `sample_taken`, `note` và ảnh; xoá điểm không còn trong
+danh sách; chèn điểm mới. Thứ tự trong hàm là xoá **trước** rồi mới chèn, để "điểm nào
+không còn" là câu hỏi không mơ hồ.
+
+Ai sửa hàm này nhớ: bỏ phần giữ nguyên dữ liệu giao hàng = xoá ảnh của người dùng.
+
+### Storage — ảnh chứng từ
+
+Bucket `delivery-photos`, **private**. Ảnh phiếu có tên khách và chữ ký; bucket public
+nghĩa là ai đoán được URL đều xem được. Đọc bằng signed URL hạn 1 giờ.
+
+Đường dẫn `<user_id>/<trip_id>/<stop_id>/<uuid>.jpg` — **segment đầu bắt buộc là
+`user_id`**, vì mọi policy phân quyền bằng `(storage.foldername(name))[1] = auth.uid()`.
+Đổi cấu trúc này thì upload hỏng với lỗi quyền không chỉ về đâu.
+
+Trình duyệt tải thẳng lên Supabase bằng anon key, **không qua server action** (nên không
+dính giới hạn body 1MB của Next) và **không cần service-role key**.
+
+Hai quy tắc bắt buộc:
+
+- **Ghi hàng thất bại thì phải xoá file vừa tải lên.** Không thì file nằm lại vĩnh viễn
+  trong hạn mức 1GB mà không gì trỏ tới.
+- **Xoá chuyến/ảnh thì xoá file trước, xoá hàng sau.** Cascade chỉ xoá hàng trong DB.
+
+Nếu sau này có route của Next phục vụ ảnh, **đường dẫn không được kết thúc bằng đuôi
+ảnh** — matcher trong `middleware.ts` loại trừ chúng, route sẽ lọt qua tầng xác thực.
 
 ### Type TypeScript
 
@@ -293,7 +351,8 @@ Nếu sau này cần tìm theo tên trong app, dùng **Google Places API** (tố
 | **3. Công ty** | Migration + RLS, CRUD, liên hệ nhiều dòng, nhập vị trí | ✅ xong |
 | **4. Tối ưu tuyến** | Module `route-optimizer` + test, trang chính | ✅ xong |
 | **5. Google Maps** | `buildGoogleMapsLinks` + test, chia chặng | ✅ xong |
-| **6. Hoàn thiện** | Trạng thái loading/lỗi/rỗng, kiểm tra trên điện thoại thật | ⏳ đang làm |
+| **6. Hoàn thiện** | Trạng thái loading/lỗi/rỗng, kiểm tra trên điện thoại thật | ✅ xong |
+| **7. Chuyến** | Lưu chuyến, lịch tra cứu, ảnh chứng từ, lấy mẫu, đã giao | ⏳ đang làm |
 
 Đã deploy: GitHub `tuquach090/beeRoute` → Vercel tự build khi push `main`.
 
@@ -312,6 +371,9 @@ src/
       companies/page.tsx
       companies/new/page.tsx
       companies/[id]/edit/page.tsx
+      trips/page.tsx                lịch tháng
+      trips/[id]/page.tsx           xem chuyến + ảnh
+      trips/[id]/edit/page.tsx      sửa tuyến, dùng lại RouteForm
   components/
     ui/                             shadcn, không sửa tay
     route-form.tsx  company-form.tsx  company-picker-sheet.tsx
@@ -320,12 +382,15 @@ src/
   lib/
     supabase/                       client / server / middleware / env
     companies/                      queries.ts (đọc) + actions.ts (ghi)
+    trips/                          queries/actions + storage.ts (đường dẫn ảnh)
+    dates/vn-date.ts                múi giờ VN + lưới lịch, có test
+    images/compress.ts              nén ảnh bằng canvas, có test
     route-optimizer/                thuần TS + test
     google-maps/                    build-links + test
     geocoding/                      parse-location + test (regex, không gọi mạng)
     validation/                     zod schema + resolver tự viết + test
     i18n/vi.ts                      toàn bộ chữ tiếng Việt
-    route-draft.ts                  sessionStorage store cho form tuyến
+    route-draft.ts                  sessionStorage store, tách ngăn theo chuyến
     use-current-location.ts         Geolocation API
   types/database.ts
 middleware.ts
@@ -353,8 +418,14 @@ Cấu hình Google OAuth và các bước deploy: xem **[README.md](README.md)**
 - Đăng ký bằng email/mật khẩu.
 - Giao diện tìm và thêm công ty `is_public` của người khác (cờ đã có trong DB và RLS, chưa có màn hình).
 - Nhiều người dùng chung một công ty (multi-tenant), phân quyền điều phối/tài xế.
-- Lưu lịch sử các tuyến, thống kê, tính lương theo chuyến.
+- Thống kê/biểu đồ theo tuần tháng, tính lương theo chuyến (lịch sử chuyến đã có).
 - Khoảng cách theo đường thật (OSRM/Google Directions), giờ mở cửa, khung giờ giao.
 - Seed dữ liệu mẫu (cần `user_id` thật nên phải có người đăng nhập trước).
 - PWA cài lên màn hình chính, dùng offline.
 - Bộ đếm ký tự cho ô "Tên hiển thị".
+- Dọn ảnh rác trong Storage: khoá ngoại cascade xoá **hàng trong DB**, không xoá file.
+  Các đường xoá hiện tại đều xoá file trước rồi mới xoá hàng, nhưng nếu bước xoá file
+  hỏng thì file ở lại vĩnh viễn và chưa có công cụ rà soát.
+- Chuyển chuyến phụ thành chuyến chính.
+- Kéo thả đổi thứ tự điểm bằng tay.
+- Hàng đợi tải ảnh khi mất mạng.

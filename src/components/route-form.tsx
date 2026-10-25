@@ -3,6 +3,7 @@
 import {
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -28,15 +29,19 @@ import { cn } from "@/lib/utils";
 import { vi } from "@/lib/i18n/vi";
 import type { CompanyWithContacts } from "@/lib/companies/queries";
 import {
-  getServerSnapshot,
-  getSnapshot,
-  subscribe,
-  writeDraft,
+  AD_HOC_KEY,
+  EMPTY_DRAFT,
+  draftStoreFor,
+  tripDraftKey,
   type EndpointMode,
   type LatLng,
   type RouteDraft,
   type TravelMode,
 } from "@/lib/route-draft";
+import { SaveTripSheet } from "@/components/save-trip-sheet";
+import type { TripDetail } from "@/lib/trips/queries";
+import type { TripInput } from "@/lib/validation/trip";
+import type { TripSlot } from "@/types/database";
 import { optimizeRoute } from "@/lib/route-optimizer/optimize";
 import type { OptimizeResult } from "@/lib/route-optimizer/types";
 import {
@@ -49,15 +54,45 @@ import {
 type Props = {
   companies: CompanyWithContacts[];
   addedId?: string;
+  /** Present when editing a saved trip rather than building an ad-hoc route. */
+  trip?: TripDetail;
+  /** Preselected date/slot when arriving from an empty calendar slot. */
+  presetDate?: string;
+  presetSlot?: TripSlot;
 };
 
 type Computed = {
   result: OptimizeResult;
   links: RouteLeg[];
+  /**
+   * The resolved endpoints. Kept rather than discarded because a saved trip
+   * has to store where it started and ended — without these the route could
+   * not be reopened in Maps weeks later.
+   */
+  start: LatLng;
+  end: LatLng;
+  startLabel: string;
+  endLabel: string;
 };
 
-export function RouteForm({ companies, addedId }: Props) {
-  const draft = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+export function RouteForm({
+  companies,
+  addedId,
+  trip,
+  presetDate,
+  presetSlot,
+}: Props) {
+  // Editing a trip gets its own sessionStorage namespace, so it cannot
+  // overwrite a half-built ad-hoc route sitting in the other tab.
+  const store = useMemo(
+    () => draftStoreFor(trip ? tripDraftKey(trip.id) : AD_HOC_KEY),
+    [trip],
+  );
+  const draft = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
+  );
   const geo = useCurrentLocation();
 
   const [computed, setComputed] = useState<Computed | null>(null);
@@ -72,21 +107,94 @@ export function RouteForm({ companies, addedId }: Props) {
     resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [computed]);
 
+  // Seed the edit draft from the saved trip the first time this mounts.
+  useEffect(() => {
+    if (!trip) return;
+    const current = store.getSnapshot();
+    if (current.selectedIds.length > 0) return;
+
+    store.write({
+      ...EMPTY_DRAFT,
+      startMode: "address",
+      startAddress: trip.start_label,
+      startLocation: { lat: trip.start_lat, lng: trip.start_lng },
+      endMode: "address",
+      endAddress: trip.end_label,
+      endLocation: { lat: trip.end_lat, lng: trip.end_lng },
+      travelMode: trip.travel_mode,
+      selectedIds: trip.stops
+        .map((s) => s.company_id)
+        .filter((v): v is string => Boolean(v)),
+      stopIdByCompanyId: Object.fromEntries(
+        trip.stops
+          .filter((s) => s.company_id)
+          .map((s) => [s.company_id as string, s.id]),
+      ),
+    });
+  }, [trip, store]);
+
   useEffect(() => {
     if (!addedId) return;
-    const current = getSnapshot();
+    const current = store.getSnapshot();
     if (current.selectedIds.includes(addedId)) return;
-    writeDraft({
+    store.write({
       ...current,
       selectedIds: [...current.selectedIds, addedId],
     });
-  }, [addedId]);
+  }, [addedId, store]);
 
   function patch(next: Partial<RouteDraft>) {
-    writeDraft({ ...getSnapshot(), ...next });
-    // Any input change invalidates a result computed from the old inputs.
+    store.write({ ...store.getSnapshot(), ...next });
+    // Any input change invalidates a result computed from the old inputs —
+    // and with it the ability to save, since the stored order and km would
+    // otherwise describe a route the user has since changed.
     setComputed(null);
   }
+
+  const stopIdFor = (companyId: string) =>
+    draft.stopIdByCompanyId[companyId] ?? null;
+
+  function buildTripValues(date: string, slot: TripSlot): TripInput {
+    const c = computed!;
+    return {
+      tripDate: date,
+      slot,
+      travelMode: draft.travelMode,
+      startLabel: c.startLabel || vi.route.useCurrentLocation,
+      startLat: c.start.lat,
+      startLng: c.start.lng,
+      endLabel: c.endLabel || vi.route.useCurrentLocation,
+      endLat: c.end.lat,
+      endLng: c.end.lng,
+      totalKm: c.result.totalKm,
+      method: c.result.method,
+      note: null,
+      stops: c.result.orderedStops.map((stop, i) => {
+        const company = companies.find((x) => x.id === stop.id);
+        return {
+          stopId: stopIdFor(stop.id),
+          companyId: stop.id,
+          displayName: company?.display_name ?? stop.label,
+          address: company?.address ?? "",
+          lat: stop.location.lat,
+          lng: stop.location.lng,
+          legKm: c.result.legsKm[i] ?? null,
+        };
+      }),
+    };
+  }
+
+  // Stops that were on the saved trip but are no longer selected lose their
+  // photos when the route is overwritten. Warn before that happens.
+  const dropped = trip
+    ? trip.stops.filter(
+        (s) => !s.company_id || !draft.selectedIds.includes(s.company_id),
+      )
+    : [];
+  const droppedPhotoCount = dropped.reduce(
+    (sum, s) => sum + s.photos.length,
+    0,
+  );
 
   const selected = draft.selectedIds
     .map((id) => companies.find((c) => c.id === id))
@@ -153,6 +261,16 @@ export function RouteForm({ companies, addedId }: Props) {
           draft.travelMode,
           labels,
         ),
+        start,
+        end,
+        startLabel:
+          draft.startMode === "current"
+            ? vi.route.useCurrentLocation
+            : draft.startAddress,
+        endLabel:
+          draft.endMode === "current"
+            ? vi.route.useCurrentLocation
+            : draft.endAddress,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : vi.route.errorGeneric);
@@ -281,6 +399,16 @@ export function RouteForm({ companies, addedId }: Props) {
               : draft.endAddress
           }
           travelMode={draft.travelMode}
+          saveSlot={
+            <SaveTripSheet
+              buildValues={buildTripValues}
+              tripId={trip?.id}
+              defaultDate={trip?.trip_date ?? presetDate}
+              defaultSlot={trip?.slot ?? presetSlot}
+              droppedPhotoCount={droppedPhotoCount}
+              droppedStopNames={dropped.map((s) => s.display_name)}
+            />
+          }
         />
       )}
 
@@ -312,6 +440,7 @@ function ResultCard({
   startLabel,
   endLabel,
   travelMode,
+  saveSlot,
 }: {
   ref: React.Ref<HTMLDivElement>;
   computed: Computed;
@@ -319,6 +448,7 @@ function ResultCard({
   startLabel: string;
   endLabel: string;
   travelMode: TravelMode;
+  saveSlot: React.ReactNode;
 }) {
   const { result, links } = computed;
   const byId = new Map(companies.map((c) => [c.id, c]));
@@ -373,6 +503,9 @@ function ResultCard({
       </p>
 
       <div className="mt-4 space-y-2">
+        {/* Saving belongs with the result: it is the only thing the trip can
+            describe, and both vanish together when an input changes. */}
+        {saveSlot}
         {links.map((leg) => (
           <Button
             key={leg.index}

@@ -2,12 +2,13 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Loader2, Route } from "lucide-react";
+import { Building2, CalendarDays, Loader2, Route } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { vi } from "@/lib/i18n/vi";
 
 const TABS = [
   { href: "/", label: vi.nav.route, icon: Route },
+  { href: "/trips", label: vi.nav.trips, icon: CalendarDays },
   { href: "/companies", label: vi.nav.companies, icon: Building2 },
 ] as const;
 
@@ -16,7 +17,7 @@ export function BottomTabs() {
 
   return (
     <nav
-      aria-label={vi.nav.route}
+      aria-label={vi.nav.label}
       // pb from the safe area so the bar clears the iPhone home indicator.
       className="sticky bottom-0 z-30 border-t bg-card/95 backdrop-blur"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}

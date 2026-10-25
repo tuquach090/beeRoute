@@ -73,6 +73,21 @@ npx supabase db push
 Kiểm tra: **Table Editor** phải thấy 3 bảng `profiles`, `companies`,
 `company_contacts`, và cột **RLS enabled** đều bật.
 
+### 3b. Kiểm tra bucket ảnh
+
+Migration `20261025000002_delivery_photos_bucket.sql` tạo bucket `delivery-photos` và
+các policy. Vào **Storage** xem bucket đã có và đang ở chế độ **private** chưa.
+
+Nếu migration báo lỗi quyền ở phần `create policy ... on storage.objects` — bảng đó
+thuộc `supabase_storage_admin`, một số project không cho đụng từ SQL thường — thì tạo
+tay 4 policy trong **Storage → Policies** cho bucket `delivery-photos`, mỗi policy một
+thao tác (select/insert/update/delete), cùng một điều kiện:
+
+```sql
+bucket_id = 'delivery-photos'
+and (storage.foldername(name))[1] = auth.uid()::text
+```
+
 ### 4. Bật đăng nhập Google
 
 **a) Google Cloud Console** — https://console.cloud.google.com
