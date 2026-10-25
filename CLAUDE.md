@@ -215,10 +215,10 @@ Sáu bảng: `profiles`, `companies`, `company_contacts`, và từ 25/10/2026 th
 
 Schema đầy đủ: `supabase/migrations/`. Giải thích lý do: **[docs/database.md](docs/database.md)**.
 
-Ba bảng: `profiles` (thông tin cơ bản lấy từ Google, tạo tự động bằng trigger khi đăng nhập
-lần đầu), `companies`, `company_contacts`.
+### Danh mục (`profiles`, `companies`, `company_contacts`)
 
-Khác với bản đặc tả ban đầu:
+`profiles` giữ thông tin cơ bản lấy từ Google, tạo tự động bằng trigger khi đăng nhập
+lần đầu. Khác với bản đặc tả ban đầu:
 
 - `companies` có thêm cột **`is_public boolean not null default false`**.
   Đặt tên `is_public` chứ không phải `public` vì `public` cũng là tên schema trong Postgres.
