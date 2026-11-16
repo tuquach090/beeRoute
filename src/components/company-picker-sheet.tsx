@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { ArrowLeft, Plus, Search } from "lucide-react";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
@@ -17,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { vi } from "@/lib/i18n/vi";
+import { useVisualViewport } from "@/lib/use-visual-viewport";
 import type { CompanyWithContacts } from "@/lib/companies/queries";
 
 type Props = {
@@ -34,6 +36,8 @@ export function CompanyPickerSheet({
   const [query, setQuery] = useState("");
   // Draft selection so closing with Huỷ leaves the route untouched.
   const [draft, setDraft] = useState<string[]>(selectedIds);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const viewport = useVisualViewport();
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -68,30 +72,64 @@ export function CompanyPickerSheet({
         </Button>
       </SheetTrigger>
 
+      {/* Full screen with the search box at the very top, not a bottom sheet.
+          A sheet hanging off the bottom edge puts the search box in the half
+          of the screen the keyboard takes, and the phone then shoves it
+          around to keep it in view. Sizing to the visual viewport keeps the
+          Xong button sitting on top of the keys instead of under them. */}
       <SheetContent
-        side="bottom"
-        className="flex max-h-[85dvh] flex-col gap-0 rounded-t-3xl p-0"
+        side="top"
+        showCloseButton={false}
+        className="mx-auto flex max-w-md flex-col gap-0 border-b-0 p-0"
+        style={{
+          top: viewport?.offsetTop ?? 0,
+          height: viewport?.height ?? "100dvh",
+        }}
+        onOpenAutoFocus={(e) => {
+          // Radix focuses the first control, which is now the back button.
+          e.preventDefault();
+          searchRef.current?.focus();
+        }}
       >
-        <SheetHeader className="shrink-0 border-b px-5 pb-4 pt-5 text-left">
-          <SheetTitle>{vi.picker.title}</SheetTitle>
-          <SheetDescription>{vi.picker.description}</SheetDescription>
+        <SheetHeader
+          className="shrink-0 flex-row items-center gap-1 border-b py-3 pr-4 pl-2"
+          style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top, 0px))" }}
+        >
+          <SheetTitle className="sr-only">{vi.picker.title}</SheetTitle>
+          <SheetDescription className="sr-only">
+            {vi.picker.description}
+          </SheetDescription>
 
-          <div className="relative mt-3">
+          <SheetClose asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-11 shrink-0"
+              aria-label={vi.common.close}
+            >
+              <ArrowLeft className="size-5" aria-hidden />
+            </Button>
+          </SheetClose>
+
+          <div className="relative min-w-0 flex-1">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden
             />
             <Input
+              ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={vi.picker.search}
               className="h-12 pl-9"
               aria-label={vi.picker.search}
+              enterKeyHint="search"
+              autoComplete="off"
             />
           </div>
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
           {results.length === 0 ? (
             <div className="py-10 text-center">
               <p className="text-sm text-muted-foreground">
@@ -147,9 +185,9 @@ export function CompanyPickerSheet({
         </div>
 
         <SheetFooter
-          className="shrink-0 flex-row gap-3 border-t px-5 py-4"
+          className="shrink-0 flex-row gap-3 border-t px-4 py-3"
           style={{
-            paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))",
+            paddingBottom: "max(0.75rem, env(safe-area-inset-bottom, 0px))",
           }}
         >
           <Button

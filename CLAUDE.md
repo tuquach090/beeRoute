@@ -115,7 +115,7 @@ với "đã cố ý đổi sang Vị trí hiện tại", và điểm mặc đị
 chuyển trang.
 
 **b) Các điểm đến** (bắt buộc ít nhất 1):
-- Nút **"+ Thêm điểm đến"** → bottom sheet danh sách công ty, có ô tìm theo tên/địa chỉ,
+- Nút **"+ Thêm điểm đến"** → màn hình chọn công ty **toàn màn hình, ô tìm nằm trên cùng** (để bàn phím không che), tìm theo tên/địa chỉ,
   chọn nhiều bằng checkbox, bấm "Xong". Huỷ thì không áp dụng gì.
 - Chưa có công ty nào hoặc không tìm thấy → nút **"Tạo công ty mới"** →
   `/companies/new?returnTo=/`.
@@ -512,6 +512,7 @@ src/
     i18n/vi.ts                      toàn bộ chữ tiếng Việt
     route-draft.ts                  sessionStorage store, tách ngăn theo chuyến
     use-current-location.ts         Geolocation API
+    use-visual-viewport.ts          phần màn hình bàn phím không che
   types/database.ts
 middleware.ts
 supabase/migrations/
