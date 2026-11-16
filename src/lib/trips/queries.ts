@@ -55,9 +55,10 @@ export type TripDetail = {
   start_label: string;
   start_lat: number;
   start_lng: number;
-  end_label: string;
-  end_lat: number;
-  end_lng: number;
+  /** Null on trips saved after the end point was dropped from the form. */
+  end_label: string | null;
+  end_lat: number | null;
+  end_lng: number | null;
   total_straight_km: number;
   method: TripMethod;
   note: string | null;

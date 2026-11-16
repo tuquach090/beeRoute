@@ -68,35 +68,55 @@ export const tripStopSchema = z.object({
     .transform((v) => (v == null ? null : v)),
 });
 
-export const tripSchema = z.object({
-  tripDate: tripDateSchema,
-  slot: tripSlotSchema,
-  travelMode: travelModeSchema,
-  startLabel: z.string().trim().min(1, "Thiếu điểm bắt đầu"),
-  startLat: latSchema,
-  startLng: lngSchema,
-  endLabel: z.string().trim().min(1, "Thiếu điểm kết thúc"),
-  endLat: latSchema,
-  endLng: lngSchema,
-  totalKm: z.number().min(0, "Quãng đường không hợp lệ"),
-  method: tripMethodSchema,
-  note: z
-    .string()
-    .trim()
-    .max(2000, "Tối đa 2000 ký tự")
-    .nullish()
-    .transform((v) => (v ? v : null)),
-  stops: z
-    .array(tripStopSchema)
-    .min(1, "Chuyến phải có ít nhất một điểm đến")
-    .max(50, "Tối đa 50 điểm đến")
-    // A repeated stopId would make the UPDATE inside save_trip ambiguous.
-    // The RPC guards this too; catching it here gives a readable message.
-    .refine((rows) => {
-      const ids = rows.map((r) => r.stopId).filter((v): v is string => !!v);
-      return new Set(ids).size === ids.length;
-    }, "Danh sách điểm bị trùng"),
-});
+export const tripSchema = z
+  .object({
+    tripDate: tripDateSchema,
+    slot: tripSlotSchema,
+    travelMode: travelModeSchema,
+    startLabel: z.string().trim().min(1, "Thiếu điểm bắt đầu"),
+    startLat: latSchema,
+    startLng: lngSchema,
+    /**
+     * The end point is optional from 16/11/2026: the form stopped asking for
+     * one, so new trips save all three as null. Trips recorded before that keep
+     * theirs, which is why these stay in the schema rather than being deleted.
+     */
+    endLabel: z
+      .string()
+      .trim()
+      .min(1, "Thiếu điểm kết thúc")
+      .nullish()
+      .transform((v) => (v ? v : null)),
+    endLat: latSchema.nullish().transform((v) => (v == null ? null : v)),
+    endLng: lngSchema.nullish().transform((v) => (v == null ? null : v)),
+    totalKm: z.number().min(0, "Quãng đường không hợp lệ"),
+    method: tripMethodSchema,
+    note: z
+      .string()
+      .trim()
+      .max(2000, "Tối đa 2000 ký tự")
+      .nullish()
+      .transform((v) => (v ? v : null)),
+    stops: z
+      .array(tripStopSchema)
+      .min(1, "Chuyến phải có ít nhất một điểm đến")
+      .max(50, "Tối đa 50 điểm đến")
+      // A repeated stopId would make the UPDATE inside save_trip ambiguous.
+      // The RPC guards this too; catching it here gives a readable message.
+      .refine((rows) => {
+        const ids = rows.map((r) => r.stopId).filter((v): v is string => !!v);
+        return new Set(ids).size === ids.length;
+      }, "Danh sách điểm bị trùng"),
+  })
+  // An end point is all three fields or none. The same rule is a check
+  // constraint on the table; catching it here turns a Postgres error into a
+  // sentence the rider can read.
+  .refine(
+    (v) =>
+      (v.endLabel === null && v.endLat === null && v.endLng === null) ||
+      (v.endLabel !== null && v.endLat !== null && v.endLng !== null),
+    "Điểm kết thúc thiếu toạ độ",
+  );
 
 export type TripInput = z.input<typeof tripSchema>;
 export type TripValues = z.output<typeof tripSchema>;

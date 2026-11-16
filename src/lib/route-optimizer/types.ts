@@ -6,16 +6,39 @@ export type OptimizeInput = {
   start: LatLng;
   /** Destinations. Ids must be unique. */
   stops: Stop[];
-  /** Fixed end point. */
-  end: LatLng;
+  /**
+   * Optional fixed end point.
+   *
+   * Ad-hoc routes leave this out: the round finishes at the last delivery,
+   * and forcing a leg back to a depot would report kilometres nobody rides.
+   * Trips saved before the end point was dropped still carry one.
+   */
+  end?: LatLng | null;
+};
+
+/** What the corridor rule did, for the note shown under the result. */
+export type CorridorSummary = {
+  lengthKm: number;
+  bearingDeg: number;
+  /** How many times the route reverses direction along the corridor. */
+  uTurns: number;
+  /** False when the stops could not be sorted onto two kerbs. */
+  sidesKnown: boolean;
 };
 
 export type OptimizeResult = {
   orderedStops: Stop[];
-  /** start→stop1, stop1→stop2, …, stopN→end. Always orderedStops.length + 1. */
+  /**
+   * start→stop1, stop1→stop2, …
+   *
+   * Length is orderedStops.length + 1 when an end point was given, and
+   * orderedStops.length when it was not.
+   */
   legsKm: number[];
   totalKm: number;
   method: "exact" | "heuristic";
+  /** Set when the stops lay along one road and the sweep rule applied. */
+  corridor: CorridorSummary | null;
 };
 
 /**

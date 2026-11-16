@@ -242,3 +242,57 @@ describe("buildSingleStopLink", () => {
     ).toBe("driving");
   });
 });
+
+describe("buildGoogleMapsLinks — without an end point", () => {
+  const start = { lat: 10.77, lng: 106.7 };
+  const stops = [
+    { id: "a", label: "A", location: { lat: 10.78, lng: 106.72 } },
+    { id: "b", label: "B", location: { lat: 10.79, lng: 106.74 } },
+  ];
+
+  it("makes the last delivery the destination", () => {
+    const [leg] = buildGoogleMapsLinks({ orderedStops: stops }, start, null);
+    const params = new URL(leg.url).searchParams;
+
+    expect(params.get("origin")).toBe("10.77,106.7");
+    expect(params.get("destination")).toBe("10.79,106.74");
+    // With the last stop promoted to destination, only the first is a
+    // waypoint — nothing is dropped.
+    expect(params.get("waypoints")).toBe("10.78,106.72");
+    expect(leg.pointCount).toBe(3);
+  });
+
+  it("covers one fewer point than the same route with an end", () => {
+    const open = buildGoogleMapsLinks({ orderedStops: stops }, start, null);
+    const closed = buildGoogleMapsLinks({ orderedStops: stops }, start, start);
+    expect(closed[0].pointCount).toBe(open[0].pointCount + 1);
+  });
+
+  it("still splits a long route into legs", () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      id: `s${i}`,
+      label: `S${i}`,
+      location: { lat: 10.7 + i * 0.01, lng: 106.7 },
+    }));
+    const legs = buildGoogleMapsLinks({ orderedStops: many }, start, null);
+
+    expect(legs.length).toBeGreaterThan(1);
+    // Consecutive legs hand over at a shared point, so the counts overlap by
+    // one each time and still add up to the whole route.
+    const covered = legs.reduce((sum, leg) => sum + leg.pointCount - 1, 0);
+    expect(covered).toBe(many.length);
+  });
+
+  it("handles a single stop with no end at all", () => {
+    const legs = buildGoogleMapsLinks(
+      { orderedStops: [stops[0]] },
+      start,
+      null,
+    );
+    const params = new URL(legs[0].url).searchParams;
+
+    expect(legs).toHaveLength(1);
+    expect(params.get("destination")).toBe("10.78,106.72");
+    expect(params.get("waypoints")).toBeNull();
+  });
+});

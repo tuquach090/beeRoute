@@ -38,13 +38,26 @@ export const vi = {
   account: {
     title: "Tài khoản",
     open: "Mở menu tài khoản",
+    settings: "Cài đặt",
     signOut: "Đăng xuất",
+  },
+
+  settings: {
+    title: "Cài đặt",
+    subtitle: "Những thứ đặt một lần rồi khỏi nhập lại mỗi sáng.",
+    defaultStart: "Điểm bắt đầu mặc định",
+    defaultStartHint:
+      "Mỗi lần mở trang Tối ưu tuyến, điểm bắt đầu sẽ tự điền sẵn chỗ này. Thường là kho lấy hàng. Để trống thì app hỏi lại mỗi lần.",
+    defaultStartEmpty: "Chưa đặt. Trang tối ưu sẽ hỏi điểm bắt đầu mỗi lần.",
+    clear: "Xoá điểm mặc định",
+    save: "Lưu cài đặt",
+    saving: "Đang lưu…",
+    saved: "Đã lưu.",
   },
 
   route: {
     title: "Tối ưu tuyến",
     start: "Điểm bắt đầu",
-    end: "Điểm kết thúc",
     useCurrentLocation: "Vị trí hiện tại",
     enterAddress: "Nhập địa chỉ",
     addressPlaceholder: "Dán link Google Maps của địa điểm",
@@ -60,14 +73,22 @@ export const vi = {
     errorNoDestinations: "Phải chọn ít nhất một điểm đến.",
     errorNoStart:
       "Chưa có toạ độ điểm bắt đầu. Chọn địa chỉ từ gợi ý hoặc dán toạ độ.",
-    errorNoEnd:
-      "Chưa có toạ độ điểm kết thúc. Chọn địa chỉ từ gợi ý hoặc dán toạ độ.",
     errorGeneric: "Không tính được tuyến. Thử lại.",
     splitNote: (n: number) =>
       `Tuyến dài quá giới hạn của một link Google Maps nên được chia thành ${n} chặng. Chạy xong chặng này thì mở chặng kế tiếp.`,
+    useDefaultStart: "Dùng điểm mặc định",
+    defaultStartApplied: (label: string) =>
+      `Đang dùng điểm mặc định: ${label}. Đổi được ở ngay dưới.`,
     resultTitle: "Thứ tự đã tối ưu",
     startLabel: "Bắt đầu",
+    /** Only old trips still carry an end point; new routes stop at the last drop. */
     endLabel: "Kết thúc",
+    corridorNote: (uTurns: number) =>
+      uTurns === 0
+        ? "Các điểm nằm dọc một tuyến đường lớn và đi được một mạch, không phải quay đầu lần nào."
+        : `Các điểm nằm dọc một tuyến đường lớn nên đã sắp theo kiểu giao hết bên phải tới điểm xa nhất rồi vòng lại bên kia. Cần quay đầu ${uTurns} lần.`,
+    corridorNoteNoSides:
+      "Các điểm nằm dọc một tuyến đường lớn nhưng đều ở cùng một bên, nên cứ chạy thẳng một mạch.",
     totalDistance: "Tổng quãng đường",
     straightLineNote:
       "Khoảng cách đường chim bay, chỉ dùng để sắp thứ tự. Đường đi thật do Google Maps tính.",

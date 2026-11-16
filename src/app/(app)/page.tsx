@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import { RouteForm } from "@/components/route-form";
 import { listOwnCompanies } from "@/lib/companies/queries";
+import { getSettings } from "@/lib/settings/queries";
 import { vi } from "@/lib/i18n/vi";
 import type { TripSlot } from "@/types/database";
 
 export const metadata: Metadata = { title: vi.route.title };
 
 export default async function RoutePage({ searchParams }: PageProps<"/">) {
-  const companies = await listOwnCompanies();
+  const [companies, settings] = await Promise.all([
+    listOwnCompanies(),
+    getSettings(),
+  ]);
 
   // Set by the company form when it was opened from here (CLAUDE.md §5.2).
   const { added, date, slot } = await searchParams;
@@ -28,6 +32,7 @@ export default async function RoutePage({ searchParams }: PageProps<"/">) {
       addedId={addedId}
       presetDate={presetDate}
       presetSlot={presetSlot}
+      defaultStart={settings.defaultStart}
     />
   );
 }

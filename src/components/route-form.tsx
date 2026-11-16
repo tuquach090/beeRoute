@@ -10,9 +10,11 @@ import {
 } from "react";
 import {
   AlertTriangle,
+  CornerUpLeft,
   Crosshair,
   ExternalLink,
   Flag,
+  Home,
   Loader2,
   MapPin,
   Navigation,
@@ -42,6 +44,7 @@ import { SaveTripSheet } from "@/components/save-trip-sheet";
 import type { TripDetail } from "@/lib/trips/queries";
 import type { TripInput } from "@/lib/validation/trip";
 import type { TripSlot } from "@/types/database";
+import type { DefaultStart } from "@/lib/settings/types";
 import { optimizeRoute } from "@/lib/route-optimizer/optimize";
 import type { OptimizeResult } from "@/lib/route-optimizer/types";
 import {
@@ -59,20 +62,20 @@ type Props = {
   /** Preselected date/slot when arriving from an empty calendar slot. */
   presetDate?: string;
   presetSlot?: TripSlot;
+  /** The start point set in Cài đặt, preselected on a fresh route. */
+  defaultStart?: DefaultStart | null;
 };
 
 type Computed = {
   result: OptimizeResult;
   links: RouteLeg[];
   /**
-   * The resolved endpoints. Kept rather than discarded because a saved trip
-   * has to store where it started and ended — without these the route could
-   * not be reopened in Maps weeks later.
+   * The resolved start. Kept rather than discarded because a saved trip has
+   * to record where it set off from — without it the route could not be
+   * reopened in Maps weeks later.
    */
   start: LatLng;
-  end: LatLng;
   startLabel: string;
-  endLabel: string;
 };
 
 export function RouteForm({
@@ -81,6 +84,7 @@ export function RouteForm({
   trip,
   presetDate,
   presetSlot,
+  defaultStart,
 }: Props) {
   // Editing a trip gets its own sessionStorage namespace, so it cannot
   // overwrite a half-built ad-hoc route sitting in the other tab.
@@ -118,9 +122,9 @@ export function RouteForm({
       startMode: "address",
       startAddress: trip.start_label,
       startLocation: { lat: trip.start_lat, lng: trip.start_lng },
-      endMode: "address",
-      endAddress: trip.end_label,
-      endLocation: { lat: trip.end_lat, lng: trip.end_lng },
+      // A saved trip brings its own start, so the default must not overwrite
+      // it — mark the seeding done before it gets the chance.
+      startSeeded: true,
       travelMode: trip.travel_mode,
       selectedIds: trip.stops
         .map((s) => s.company_id)
@@ -132,6 +136,26 @@ export function RouteForm({
       ),
     });
   }, [trip, store]);
+
+  // Apply the default start from Cài đặt, once per draft. Editing a trip
+  // skips this: that route already has a start, and it is history.
+  useEffect(() => {
+    if (trip) return;
+    const current = store.getSnapshot();
+    if (current.startSeeded) return;
+
+    store.write({
+      ...current,
+      startSeeded: true,
+      ...(defaultStart
+        ? {
+            startMode: "address" as const,
+            startAddress: defaultStart.label,
+            startLocation: { lat: defaultStart.lat, lng: defaultStart.lng },
+          }
+        : {}),
+    });
+  }, [trip, defaultStart, store]);
 
   useEffect(() => {
     if (!addedId) return;
@@ -163,9 +187,11 @@ export function RouteForm({
       startLabel: c.startLabel || vi.route.useCurrentLocation,
       startLat: c.start.lat,
       startLng: c.start.lng,
-      endLabel: c.endLabel || vi.route.useCurrentLocation,
-      endLat: c.end.lat,
-      endLng: c.end.lng,
+      // The form stopped asking for an end point; a round finishes wherever
+      // the last parcel is handed over.
+      endLabel: null,
+      endLat: null,
+      endLng: null,
       totalKm: c.result.totalKm,
       method: c.result.method,
       note: null,
@@ -200,15 +226,22 @@ export function RouteForm({
     .map((id) => companies.find((c) => c.id === id))
     .filter((c): c is CompanyWithContacts => Boolean(c));
 
-  /** Resolves one endpoint to coordinates, asking the browser when needed. */
-  async function resolveEndpoint(which: "start" | "end") {
-    const mode = which === "start" ? draft.startMode : draft.endMode;
-    if (mode === "current") {
+  /** Resolves the start to coordinates, asking the browser when needed. */
+  async function resolveStart() {
+    if (draft.startMode === "current") {
       // Read the position now rather than reusing a stale fix (CLAUDE.md §5.2c).
       return geo.request();
     }
-    return which === "start" ? draft.startLocation : draft.endLocation;
+    return draft.startLocation;
   }
+
+  const usingDefaultStart =
+    defaultStart !== null &&
+    defaultStart !== undefined &&
+    draft.startMode === "address" &&
+    draft.startAddress === defaultStart.label &&
+    draft.startLocation?.lat === defaultStart.lat &&
+    draft.startLocation?.lng === defaultStart.lng;
 
   async function onOptimize() {
     setError(null);
@@ -221,21 +254,15 @@ export function RouteForm({
 
     setWorking(true);
     try {
-      const start = await resolveEndpoint("start");
+      const start = await resolveStart();
       if (!start) {
         setError(geo.error ?? vi.route.errorNoStart);
-        return;
-      }
-      const end = await resolveEndpoint("end");
-      if (!end) {
-        setError(geo.error ?? vi.route.errorNoEnd);
         return;
       }
 
       // Runs in the browser, no server round trip (CLAUDE.md §5.2d).
       const result = optimizeRoute({
         start,
-        end,
         stops: selected.map((c) => ({
           id: c.id,
           label: c.display_name,
@@ -257,20 +284,15 @@ export function RouteForm({
         links: buildGoogleMapsLinks(
           result,
           start,
-          end,
+          null,
           draft.travelMode,
           labels,
         ),
         start,
-        end,
         startLabel:
           draft.startMode === "current"
             ? vi.route.useCurrentLocation
             : draft.startAddress,
-        endLabel:
-          draft.endMode === "current"
-            ? vi.route.useCurrentLocation
-            : draft.endAddress,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : vi.route.errorGeneric);
@@ -293,6 +315,33 @@ export function RouteForm({
             patch({ startAddress: address, startLocation: location })
           }
         />
+
+        {defaultStart &&
+          (usingDefaultStart ? (
+            <p className="text-muted-foreground text-xs leading-5">
+              {vi.route.defaultStartApplied(defaultStart.label)}
+            </p>
+          ) : (
+            // One tap back to the warehouse after trying something else,
+            // rather than retyping it.
+            <Button
+              variant="outline"
+              className="h-11 w-full gap-2"
+              onClick={() =>
+                patch({
+                  startMode: "address",
+                  startAddress: defaultStart.label,
+                  startLocation: {
+                    lat: defaultStart.lat,
+                    lng: defaultStart.lng,
+                  },
+                })
+              }
+            >
+              <Home className="size-4" aria-hidden />
+              {vi.route.useDefaultStart}
+            </Button>
+          ))}
       </Section>
 
       <Section
@@ -344,18 +393,6 @@ export function RouteForm({
         />
       </Section>
 
-      <Section icon={<Flag className="size-4" />} title={vi.route.end}>
-        <EndpointPicker
-          mode={draft.endMode}
-          address={draft.endAddress}
-          location={draft.endLocation}
-          onModeChange={(m) => patch({ endMode: m })}
-          onAddressChange={(address, location) =>
-            patch({ endAddress: address, endLocation: location })
-          }
-        />
-      </Section>
-
       <Section
         icon={<Crosshair className="size-4" />}
         title={vi.route.travelMode}
@@ -392,11 +429,6 @@ export function RouteForm({
             draft.startMode === "current"
               ? vi.route.useCurrentLocation
               : draft.startAddress
-          }
-          endLabel={
-            draft.endMode === "current"
-              ? vi.route.useCurrentLocation
-              : draft.endAddress
           }
           travelMode={draft.travelMode}
           saveSlot={
@@ -438,7 +470,6 @@ function ResultCard({
   computed,
   companies,
   startLabel,
-  endLabel,
   travelMode,
   saveSlot,
 }: {
@@ -446,7 +477,6 @@ function ResultCard({
   computed: Computed;
   companies: CompanyWithContacts[];
   startLabel: string;
-  endLabel: string;
   travelMode: TravelMode;
   saveSlot: React.ReactNode;
 }) {
@@ -470,6 +500,9 @@ function ResultCard({
               km={result.legsKm[i]}
               contacts={company?.company_contacts}
               note={company?.note}
+              // There is no end row any more, so the final delivery closes
+              // the list and must not trail a connector line.
+              last={i === result.orderedStops.length - 1}
               mapUrl={buildSingleStopLink(
                 {
                   location: s.location,
@@ -481,13 +514,6 @@ function ResultCard({
             />
           );
         })}
-        <Stop
-          index={null}
-          name={vi.route.endLabel}
-          address={endLabel}
-          km={result.legsKm[result.legsKm.length - 1]}
-          last
-        />
       </ol>
 
       <div className="mt-4 flex items-baseline justify-between border-t pt-4">
@@ -501,6 +527,15 @@ function ResultCard({
       <p className="text-muted-foreground mt-2 text-xs leading-5">
         {vi.route.straightLineNote}
       </p>
+
+      {result.corridor && (
+        <p className="bg-muted mt-3 flex gap-2 rounded-xl p-3 text-xs leading-5">
+          <CornerUpLeft className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          {result.corridor.sidesKnown
+            ? vi.route.corridorNote(result.corridor.uTurns)
+            : vi.route.corridorNoteNoSides}
+        </p>
+      )}
 
       <div className="mt-4 space-y-2">
         {/* Saving belongs with the result: it is the only thing the trip can

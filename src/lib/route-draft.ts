@@ -8,9 +8,14 @@ export type RouteDraft = {
   startMode: EndpointMode;
   startAddress: string;
   startLocation: LatLng | null;
-  endMode: EndpointMode;
-  endAddress: string;
-  endLocation: LatLng | null;
+  /**
+   * Whether the default start point from Cài đặt has already been applied.
+   *
+   * Without this flag there is no telling "the rider has not touched the form
+   * yet" from "the rider deliberately switched back to Vị trí hiện tại", and
+   * the default would keep reappearing after every navigation.
+   */
+  startSeeded: boolean;
   selectedIds: string[];
   travelMode: TravelMode;
   /**
@@ -27,9 +32,7 @@ export const EMPTY_DRAFT: RouteDraft = {
   startMode: "current",
   startAddress: "",
   startLocation: null,
-  endMode: "address",
-  endAddress: "",
-  endLocation: null,
+  startSeeded: false,
   selectedIds: [],
   travelMode: "two-wheeler",
   stopIdByCompanyId: {},

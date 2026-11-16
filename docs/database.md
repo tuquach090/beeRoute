@@ -8,6 +8,7 @@ Schema nằm ở `supabase/migrations/`. File này giải thích **vì sao** nó
 | `20261018000004_fix_contact_without_phone.sql` | định nghĩa hiện hành của RPC `save_company` |
 | `20261025000001_trips.sql` | `trips`, `trip_stops`, `trip_stop_photos` + RPC `save_trip` |
 | `20261025000002_delivery_photos_bucket.sql` | bucket Storage `delivery-photos` + policy |
+| `20261116000001_optional_end_and_default_start.sql` | bỏ điểm kết thúc bắt buộc + điểm bắt đầu mặc định |
 
 ## Sáu bảng
 
@@ -39,6 +40,22 @@ tiếp từ app. `profiles` là bản sao của vài trường cần hiển th�
 
 Dòng profile được tạo **tự động** bởi trigger `on_auth_user_created` chạy sau
 khi Supabase chèn vào `auth.users`. App không phải tự insert.
+
+Từ 16/11/2026 bảng này giữ thêm **tuỳ chọn của người dùng**:
+
+```sql
+default_start_label text
+default_start_lat   double precision
+default_start_lng   double precision
+```
+
+Đây là điểm xuất phát tự điền cho mọi tuyến mới — thường là kho lấy hàng. Nó nằm ở
+`profiles` chứ không phải một bảng riêng vì nó là **một dòng cho một người**, và
+`profiles` đã sẵn RLS chỉ-chủ-sở-hữu nên không phải viết policy mới.
+
+Ràng buộc `profiles_default_start_complete` bắt ba cột phải đi cùng nhau. Thiếu toạ
+độ thì cái nhãn không điền được vào đâu, nhưng nhìn vào màn Cài đặt vẫn tưởng đã lưu
+xong — kiểu hỏng im lặng khó chịu nhất.
 
 Trigger dùng `security definer` để bỏ qua RLS — lúc đó chưa có session nên
 không chèn được bằng quyền thường.
@@ -90,6 +107,17 @@ tắc thì phải ghi lại, nên nó nằm ở đây thay vì âm thầm xuất
 ### `trips`
 
 Một chuyến là một tuyến đã tối ưu, thuộc về một **ngày** và một **buổi**.
+
+> **16/11/2026 — điểm kết thúc thành tuỳ chọn.** Form không hỏi nữa; chuyến kết thúc
+> ở điểm giao cuối cùng. Ba cột `end_label` / `end_lat` / `end_lng` được cho phép
+> NULL **chứ không bị xoá**: các chuyến ghi trước ngày đó thật sự có điểm kết thúc,
+> và xoá cột là viết lại một dữ kiện đã đúng vào lúc nó được ghi. Ràng buộc
+> `trips_end_all_or_nothing` giữ ba cột đi cùng nhau, vì một chuyến có nhãn mà thiếu
+> toạ độ sẽ lặng lẽ mất điểm đến trong link Google Maps.
+>
+> `save_trip` **không được khai báo lại** ở migration đó. Ba tham số `p_end_*` chỉ
+> cần nhận NULL, nên không sinh ra định nghĩa thứ hai cho cùng một hàm — bài học
+> `save_company` ở quy tắc 3.8.
 
 ```sql
 trip_date      date   not null                   -- không phải timestamptz

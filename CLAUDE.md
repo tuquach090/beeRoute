@@ -105,6 +105,15 @@ Chi tiết đầy đủ, kèm bảng màu và lý do, nằm ở **[docs/design.m
   Có xử lý từ chối quyền / quá hạn / trình duyệt không hỗ trợ.
 - **Nhập địa chỉ**: dán link Google Maps hoặc toạ độ (xem mục 8).
 
+Có đặt **điểm bắt đầu mặc định** trong Cài đặt (mục 5.4) thì ô này **tự điền sẵn**
+chỗ đó khi mở trang. Đổi sang cái khác vẫn được, và có nút "Dùng điểm mặc định" để
+quay lại bằng một lần bấm.
+
+Việc tự điền chỉ chạy **một lần cho mỗi bản nháp**, đánh dấu bằng cờ `startSeeded`
+trong `route-draft.ts`. Không có cờ đó thì không phân biệt được "chưa đụng vào form"
+với "đã cố ý đổi sang Vị trí hiện tại", và điểm mặc định sẽ nhảy lại mỗi lần
+chuyển trang.
+
 **b) Các điểm đến** (bắt buộc ít nhất 1):
 - Nút **"+ Thêm điểm đến"** → bottom sheet danh sách công ty, có ô tìm theo tên/địa chỉ,
   chọn nhiều bằng checkbox, bấm "Xong". Huỷ thì không áp dụng gì.
@@ -114,15 +123,18 @@ Chi tiết đầy đủ, kèm bảng màu và lý do, nằm ở **[docs/design.m
   (`?added=<id>`). Trạng thái form nằm trong `sessionStorage`, quản lý ở
   `src/lib/route-draft.ts`.
 
-**c) Điểm kết thúc** (bắt buộc): giống điểm bắt đầu.
+**c) Phương tiện**: xe máy / ô tô.
 
-**d) Phương tiện**: xe máy / ô tô.
+**d) Nút "Tối ưu tuyến"** → chạy module mục 6 **ngay trên trình duyệt**, không gọi server.
 
-**e) Nút "Tối ưu tuyến"** → chạy module mục 6 **ngay trên trình duyệt**, không gọi server.
-
-**f) Kết quả** hiện ngay trên trang: thứ tự đã tối ưu, khoảng cách từng chặng, tổng km
+**e) Kết quả** hiện ngay trên trang: thứ tự đã tối ưu, khoảng cách từng chặng, tổng km
 (ghi rõ là đường chim bay), số điện thoại bấm gọi được (`tel:`), ghi chú của công ty,
 và nút **"Mở trên Google Maps"**.
+
+> **Không còn ô "Điểm kết thúc"** (gỡ 16/11/2026). Chuyến kết thúc ở điểm giao cuối
+> cùng. Ép thêm một chặng về kho là cộng vào tổng km một đoạn đường không ai chạy.
+> Các chuyến lưu trước ngày đó vẫn giữ điểm kết thúc của chúng — ba cột `end_*` chỉ
+> được cho phép NULL chứ không bị xoá.
 
 ### 5.3 Quản lý công ty — ĐÃ LÀM
 
@@ -143,6 +155,21 @@ và nút **"Mở trên Google Maps"**.
 - Lưu xong: có `returnTo` thì quay về đó kèm `?added=<id>`, không thì về `/companies`.
 - Xoá công ty: có hộp xác nhận.
 
+### 5.4 Cài đặt — ĐÃ LÀM
+
+`/settings`, vào bằng menu avatar ở góc trên phải (không chiếm chỗ thanh tab dưới đáy).
+
+| Thiết lập | Ghi chú |
+|---|---|
+| Điểm bắt đầu mặc định | Dán link Google Maps như mọi chỗ khác (mục 8). Để trống = hỏi lại mỗi lần |
+
+Lưu vào ba cột trên `profiles`, không phải bảng mới: đây là tuỳ chọn của một người,
+và `profiles` đã có sẵn RLS chỉ-chủ-sở-hữu.
+
+**Nhãn và toạ độ phải đi cùng nhau** — có cái này thiếu cái kia thì điểm mặc định
+không điền được vào đâu mà trông vẫn như đã lưu. Ràng buộc nằm ở cả `check` trong
+database lẫn `.refine` trong `src/lib/validation/settings.ts`.
+
 ## 6. Module tối ưu tuyến — ĐÃ LÀM
 
 `src/lib/route-optimizer/`. **Thuần TypeScript**, không phụ thuộc React, Next.js hay
@@ -154,13 +181,23 @@ Supabase. Test ở `optimize.test.ts`.
 type LatLng = { lat: number; lng: number };
 type Stop = { id: string; label: string; location: LatLng };
 
-type OptimizeInput = { start: LatLng; stops: Stop[]; end: LatLng };
+// end là tuỳ chọn. Tuyến mới không có; chuyến lưu trước 16/11/2026 thì có.
+type OptimizeInput = { start: LatLng; stops: Stop[]; end?: LatLng | null };
+
+type CorridorSummary = {
+  lengthKm: number;
+  bearingDeg: number;
+  uTurns: number;      // số lần phải quay đầu
+  sidesKnown: boolean; // false = không phân biệt được hai bên đường
+};
 
 type OptimizeResult = {
   orderedStops: Stop[];
-  legsKm: number[];   // start→stop1, …, stopN→end. Luôn = orderedStops.length + 1
-  totalKm: number;
+  // start→stop1, … Có end thì dài orderedStops.length + 1, không có thì = length.
+  legsKm: number[];
+  totalKm: number;     // haversine thuần, KHÔNG cộng tiền phạt quay đầu
   method: "exact" | "heuristic";
+  corridor: CorridorSummary | null;
 };
 
 export function optimizeRoute(input: OptimizeInput): OptimizeResult;
@@ -169,13 +206,78 @@ export function optimizeRoute(input: OptimizeInput): OptimizeResult;
 ### 6.2 Thuật toán
 
 - Khoảng cách **Haversine** (km, bán kính 6371). Ma trận tính sẵn một lần.
-- Điểm đầu và cuối cố định — đây là bài toán **đường đi mở**, không phải chu trình.
+- Điểm đầu cố định, điểm cuối tuỳ chọn — đây là bài toán **đường đi mở**, không phải chu trình.
 - **≤ 8 điểm đến** (`EXACT_MAX_STOPS`): duyệt mọi hoán vị, có **cắt nhánh** — bỏ ngay
   nhánh nào đã đắt hơn lời giải tốt nhất hiện có. `method: "exact"`.
 - **> 8 điểm**: Nearest Neighbor để có lời giải ban đầu, rồi **2-opt** tới khi không giảm
   được nữa. `method: "heuristic"`.
 - Luôn ghi rõ trong code và trên giao diện: đây là **khoảng cách đường chim bay**, chỉ dùng
   để sắp thứ tự. Đường đi thật do Google Maps tính.
+
+### Luật "bên phải đi trước" (thêm 16/11/2026)
+
+Hàm mục tiêu **không còn là quãng đường thuần**:
+
+```
+điểm = tổng km  +  số lần quay đầu × U_TURN_PENALTY_KM  +  số điểm đi bên trái lượt đi × WRONG_SIDE_PENALTY_KM
+```
+
+Lý do: trên đường lớn có dải phân cách, **thứ tự ngắn nhất theo đường chim bay lại là
+thứ tự tệ nhất để chạy** — nó cho tài xế nhảy qua nhảy lại hai bên đường, mỗi lần là
+một lần chạy tới chỗ hở dải phân cách rồi vòng lại. Thà chạy thêm vài km còn hơn.
+
+Việc này chia làm **hai câu hỏi tách rời**, vì chúng khác nhau cả về độ khó lẫn độ
+tin cậy. Cả hai nằm ở `src/lib/route-optimizer/corridor.ts`, và app **không có dữ
+liệu đường** (mục 2) nên tất cả suy từ hình dạng chùm điểm.
+
+**Câu hỏi 1 — các điểm có nằm dọc một hành lang không?** Cỡ kilômét, dễ trả lời.
+Khớp trục chính bằng PCA rồi đòi đủ bốn điều: dài ≥ 1.5km, lệch khỏi trục ≤ 150m
+(RMS), dài ≥ 8× bề ngang, và **không điểm nào nằm sau lưng điểm xuất phát** (xuất
+phát ở giữa hành lang thì "đi ra" không còn nghĩa gì nữa).
+
+**Câu hỏi 2 — mỗi điểm nằm bên nào?** Cỡ vài chục mét, khó hơn hẳn, và là chỗ bản
+đầu tiên của tao làm sai. Hai cái bẫy:
+
+1. **Trục PCA bị chính hai bên đường kéo nghiêng.** Các điểm so le hai bên làm trục
+   lệch đi đúng cỡ khoảng cách giữa hai bên, nên đo độ lệch so với một đường thẳng
+   không nghiêng thì hai bên nhoè vào nhau.
+2. **Toạ độ gõ tay dọc một con đường vốn đã lệch 20–30m.** Chỉ đếm xem điểm nào lệch
+   dương, điểm nào lệch âm thì một con đường **không có** dải phân cách cũng ra "hai
+   bên".
+
+Nên thay vì chia theo dấu, code **khớp hẳn một mô hình**:
+
+```
+độ lệch = tung độ gốc + độ dốc × quãng đường dọc trục + nửa bề rộng × bên
+```
+
+Đường tim được phép có độ dốc riêng — đó chính là chỗ hấp thụ cái nghiêng ở bẫy 1.
+Giải bằng cách luân phiên: khớp hệ số, gán lại mỗi điểm về lề gần hơn, lặp lại (2–3
+vòng là đứng yên).
+
+Rồi mới tin kết quả, với ba cửa ải:
+
+| Điều kiện | Chặn cái gì |
+|---|---|
+| Hai lề cách nhau ≥ 20m | Dải phân cách tưởng tượng |
+| Nửa bề rộng ≥ 2× phần dư chưa giải thích được | Nhiễu toạ độ đội lốt hai lề (bẫy 2) |
+| Mỗi bên ≥ 2 điểm, và tổng ≥ 5 điểm | Một điểm lạc tự nhận là một lề; và việc khớp 3 hệ số vào 4 điểm thì *luôn* vừa khít |
+
+Không qua được thì `sidesKnown = false`: vẫn tính là hành lang, nhưng **không áp luật
+bên phải**, chỉ chạy một mạch. Mọi điểm cùng một bên cũng rơi vào đây — và đúng, vì
+khi đó **không có dải phân cách nào để băng qua**, không mất gì cả.
+
+`WRONG_SIDE_PENALTY_KM` cố ý để nhỏ (0.2): nó chỉ được phép phân định hai phương án
+xấp xỉ nhau, không được phép thắng một đoạn đường vòng thật.
+
+**Hai hằng số để chỉnh** nằm ở đầu `optimize.ts`. Đặt `U_TURN_PENALTY_KM = 0` là
+quay về đúng hành vi cũ.
+
+**`totalKm` vẫn là km thật**, tiền phạt chỉ dùng để xếp thứ tự chứ không bao giờ được
+cộng vào con số hiện ra cho người dùng.
+
+Vì hàm mục tiêu không còn tách được theo từng cạnh, `twoOpt` phải **chấm điểm cả
+tuyến** mỗi lần thử đảo đoạn, không dùng mẹo so hai cạnh biên được nữa.
 
 ### 6.3 Tạo link Google Maps
 
@@ -197,8 +299,10 @@ chữ sai thì dẫn tài xế tới chỗ khác. Nên chỉ gửi chữ khi ch�
 (mục 8). Thiếu dữ kiện thì luôn lùi về toạ độ: **một điểm đúng mà không tên vẫn hơn một
 cái tên dẫn sai chỗ**.
 
-Điểm đầu và cuối luôn gửi toạ độ — chúng đến từ GPS hoặc người dùng gõ, không có bản ghi
-công ty nào đứng sau.
+Điểm đầu luôn gửi toạ độ — nó đến từ GPS hoặc người dùng gõ, không có bản ghi công ty
+nào đứng sau. Từ 16/11/2026 không còn điểm kết thúc riêng, nên **`destination` của link
+chính là điểm giao cuối cùng** — đó là một công ty có địa chỉ thật, nên nó được gửi
+dạng chữ và hiện tên đàng hoàng trên Maps.
 
 Toạ độ làm tròn 6 chữ số (~11cm) để URL không dính nhiễu dấu phẩy động.
 
@@ -218,7 +322,11 @@ Schema đầy đủ: `supabase/migrations/`. Giải thích lý do: **[docs/datab
 ### Danh mục (`profiles`, `companies`, `company_contacts`)
 
 `profiles` giữ thông tin cơ bản lấy từ Google, tạo tự động bằng trigger khi đăng nhập
-lần đầu. Khác với bản đặc tả ban đầu:
+lần đầu, cộng thêm **`default_start_label` / `default_start_lat` / `default_start_lng`**
+(thêm 16/11/2026, mục 5.4). Ba cột này là "tất cả hoặc không cái nào", ép bằng
+`check` chứ không chỉ tin vào form.
+
+Khác với bản đặc tả ban đầu:
 
 - `companies` có thêm cột **`is_public boolean not null default false`**.
   Đặt tên `is_public` chứ không phải `public` vì `public` cũng là tên schema trong Postgres.
@@ -252,7 +360,7 @@ Hàm này hiện được định nghĩa ở migration `004`. Nếu cần sửa,
 
 ### Chuyến (`trips`, `trip_stops`, `trip_stop_photos`)
 
-Migration `20261025000001_trips.sql`. **Chỉ chủ sở hữu đọc được — không có nhánh
+Migration `20261025000001_trips.sql`, sửa thêm ở `20261116000001`. **Chỉ chủ sở hữu đọc được — không có nhánh
 `or is_public` ở đâu cả.** Công ty có thể công khai, nhưng việc bạn ghé đó sáng thứ Ba
 thì không.
 
@@ -267,6 +375,14 @@ Ba chi tiết cố ý:
 - **`trip_stops` snapshot** tên/địa chỉ/toạ độ. `company_id` là `on delete set null`, nên
   xoá công ty không làm mất điểm trong chuyến cũ. Nhưng **số điện thoại đọc sống** từ
   `companies` — tài xế đứng ở cổng cần số của hôm nay, không phải số ba tháng trước.
+- **`end_label` / `end_lat` / `end_lng` cho phép NULL** từ 16/11/2026. Form không hỏi
+  điểm kết thúc nữa (mục 5.2). Ba cột được **nới lỏng chứ không xoá**: chuyến cũ có
+  điểm kết thúc thật, xoá cột là viết lại lịch sử đã đúng lúc nó được ghi. Có ràng
+  buộc `trips_end_all_or_nothing` để không ra được chuyến có nhãn mà thiếu toạ độ.
+
+`save_trip` **không được khai báo lại** ở migration `20261116000001`: ba tham số
+`p_end_*` của nó giờ nhận NULL là xong, nên không sinh ra định nghĩa thứ hai cho một
+hàm (quy tắc 3.8).
 
 ### RPC `save_trip` — khác `save_company` một điểm sống còn
 
@@ -352,7 +468,8 @@ Nếu sau này cần tìm theo tên trong app, dùng **Google Places API** (tố
 | **4. Tối ưu tuyến** | Module `route-optimizer` + test, trang chính | ✅ xong |
 | **5. Google Maps** | `buildGoogleMapsLinks` + test, chia chặng | ✅ xong |
 | **6. Hoàn thiện** | Trạng thái loading/lỗi/rỗng, kiểm tra trên điện thoại thật | ✅ xong |
-| **7. Chuyến** | Lưu chuyến, lịch tra cứu, ảnh chứng từ, lấy mẫu, đã giao | ⏳ đang làm |
+| **7. Chuyến** | Lưu chuyến, lịch tra cứu, ảnh chứng từ, lấy mẫu, đã giao | ✅ xong |
+| **8. Cài đặt + luật bên phải** | Bỏ điểm kết thúc, điểm bắt đầu mặc định, tối ưu theo hành lang | ⏳ đang làm |
 
 Đã deploy: GitHub `tuquach090/beeRoute` → Vercel tự build khi push `main`.
 
@@ -374,18 +491,21 @@ src/
       trips/page.tsx                lịch tháng
       trips/[id]/page.tsx           xem chuyến + ảnh
       trips/[id]/edit/page.tsx      sửa tuyến, dùng lại RouteForm
+      settings/page.tsx             điểm bắt đầu mặc định
   components/
     ui/                             shadcn, không sửa tay
     route-form.tsx  company-form.tsx  company-picker-sheet.tsx
+    settings-form.tsx
     address-input.tsx  account-menu.tsx  bottom-tabs.tsx
     logo.tsx  theme-script.tsx  theme-toggle.tsx  google-*.tsx
   lib/
     supabase/                       client / server / middleware / env
     companies/                      queries.ts (đọc) + actions.ts (ghi)
     trips/                          queries/actions + storage.ts (đường dẫn ảnh)
+    settings/                       queries/actions + types.ts (điểm bắt đầu mặc định)
     dates/vn-date.ts                múi giờ VN + lưới lịch, có test
     images/compress.ts              nén ảnh bằng canvas, có test
-    route-optimizer/                thuần TS + test
+    route-optimizer/                thuần TS + test (optimize + corridor)
     google-maps/                    build-links + test
     geocoding/                      parse-location + test (regex, không gọi mạng)
     validation/                     zod schema + resolver tự viết + test
@@ -420,6 +540,12 @@ Cấu hình Google OAuth và các bước deploy: xem **[README.md](README.md)**
 - Nhiều người dùng chung một công ty (multi-tenant), phân quyền điều phối/tài xế.
 - Thống kê/biểu đồ theo tuần tháng, tính lương theo chuyến (lịch sử chuyến đã có).
 - Khoảng cách theo đường thật (OSRM/Google Directions), giờ mở cửa, khung giờ giao.
+  Có dữ liệu đường thì luật "bên phải đi trước" (mục 6.2) hết phải đoán: biết được
+  chỗ nào thật sự có dải phân cách và điểm nằm bên nào, thay vì suy từ toạ độ.
+- Nhiều điểm bắt đầu mặc định (kho sáng khác kho chiều) — hiện chỉ có một.
+- Chỉnh `U_TURN_PENALTY_KM` ngay trong Cài đặt. Giờ phải sửa code rồi deploy lại.
+- Nhận ra **nhiều** hành lang trong một chuyến. Hiện chỉ xét cả chùm điểm là một
+  hành lang hoặc không là gì; nửa chuyến chạy quốc lộ nửa chuyến chui hẻm thì bị bỏ qua.
 - Seed dữ liệu mẫu (cần `user_id` thật nên phải có người đăng nhập trước).
 - PWA cài lên màn hình chính, dùng offline.
 - Bộ đếm ký tự cho ô "Tên hiển thị".

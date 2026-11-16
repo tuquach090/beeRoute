@@ -76,19 +76,23 @@ export type RouteLeg = {
  * single link can carry. Each extra leg starts where the previous one ended,
  * so following them in order walks the whole route.
  *
+ * `end` is optional. Without one the last delivery becomes the destination,
+ * which is what the rider wants: the round is over when the last parcel is
+ * handed over, not when they get back to where they started.
+ *
  * `stopLabels` maps stop id → the name and address to display. Omit it and
  * every point falls back to coordinates.
  */
 export function buildGoogleMapsLinks(
   result: Pick<OptimizeResult, "orderedStops">,
   start: LatLng,
-  end: LatLng,
+  end: LatLng | null,
   travelMode: TravelMode = "two-wheeler",
   stopLabels?: Map<string, StopLabel>,
 ): RouteLeg[] {
   const path: RoutePoint[] = [
-    // Start and end are a live GPS fix or a typed address, so they stay as
-    // coordinates: there is no verified company record behind them.
+    // The start is a live GPS fix or a typed address, so it stays as
+    // coordinates: there is no verified company record behind it.
     { location: start },
     ...result.orderedStops.map((s) => {
       const label = stopLabels?.get(s.id);
@@ -98,8 +102,8 @@ export function buildGoogleMapsLinks(
         address: label?.address,
       };
     }),
-    { location: end },
   ];
+  if (end) path.push({ location: end });
 
   // Each link holds an origin, up to MAX_WAYPOINTS_PER_LINK stops, and a
   // destination. Consecutive links overlap by one point: the hand-over.

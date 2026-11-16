@@ -103,6 +103,9 @@ describe("parsing stored values", () => {
     expect(snapshot.travelMode).toBe("driving");
     expect(snapshot.stopIdByCompanyId).toEqual({});
     expect(snapshot.startMode).toBe("current");
+    // A draft stored before the default start point existed has not had one
+    // applied, so it must read as unseeded rather than undefined.
+    expect(snapshot.startSeeded).toBe(false);
   });
 
   it("falls back to empty on corrupt JSON instead of throwing", () => {

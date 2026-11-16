@@ -1,6 +1,7 @@
 "use client";
 
-import { LogOut, User as UserIcon } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Settings, User as UserIcon } from "lucide-react";
 import {
   Dialog,
   DialogClose,
@@ -56,6 +57,21 @@ export function AccountMenu({ fullName, email, avatarUrl }: Props) {
             </DialogDescription>
           )}
         </DialogHeader>
+
+        {/* DialogClose wraps the link so the sheet is gone by the time the
+            settings page paints, rather than hanging over it. */}
+        <DialogClose asChild>
+          <Button
+            asChild
+            variant="outline"
+            className="mt-2 h-12 w-full justify-start gap-2 font-semibold"
+          >
+            <Link href="/settings">
+              <Settings className="size-4" aria-hidden />
+              {vi.account.settings}
+            </Link>
+          </Button>
+        </DialogClose>
 
         <form action="/auth/signout" method="post" className="mt-2">
           <Button

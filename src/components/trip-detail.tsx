@@ -71,7 +71,11 @@ export function TripDetailView({
       })),
     },
     { lat: trip.start_lat, lng: trip.start_lng },
-    { lat: trip.end_lat, lng: trip.end_lng },
+    // Trips saved before the end point was dropped still have one; newer ones
+    // finish at the last delivery.
+    trip.end_lat !== null && trip.end_lng !== null
+      ? { lat: trip.end_lat, lng: trip.end_lng }
+      : null,
     trip.travel_mode,
     labels,
   );
@@ -117,6 +121,7 @@ export function TripDetailView({
             key={stop.id}
             index={i + 1}
             stop={stop}
+            last={trip.end_label === null && i === trip.stops.length - 1}
             userId={userId}
             tripId={trip.id}
             mapUrl={buildSingleStopLink(
@@ -130,7 +135,9 @@ export function TripDetailView({
             onChanged={() => router.refresh()}
           />
         ))}
-        <Endpoint label={vi.route.endLabel} value={trip.end_label} last />
+        {trip.end_label !== null && (
+          <Endpoint label={vi.route.endLabel} value={trip.end_label} last />
+        )}
       </ol>
 
       <div className="bg-card rounded-2xl border p-4">
@@ -240,6 +247,7 @@ function StopRow({
   userId,
   tripId,
   mapUrl,
+  last,
   onChanged,
 }: {
   index: number;
@@ -247,6 +255,8 @@ function StopRow({
   userId: string;
   tripId: string;
   mapUrl: string;
+  /** True for the final row, so it does not trail a connector into nothing. */
+  last?: boolean;
   onChanged: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -293,10 +303,12 @@ function StopRow({
 
   return (
     <li className="relative flex gap-3 pb-4">
-      <span
-        className="bg-border absolute top-9 bottom-0 left-4 w-px"
-        aria-hidden
-      />
+      {!last && (
+        <span
+          className="bg-border absolute top-9 bottom-0 left-4 w-px"
+          aria-hidden
+        />
+      )}
       <span
         className={cn(
           "tnum relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold",
