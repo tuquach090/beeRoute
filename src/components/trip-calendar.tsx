@@ -147,12 +147,12 @@ function monthHref(ym: YearMonth) {
 const SLOT_BAR: Record<SlotMark, string> = {
   none: "h-1 bg-border",
   trip: "h-1 bg-primary",
-  // Thicker as well as violet, so it does not rest on colour alone.
+  // Thicker as well as red, so it does not rest on colour alone.
   far: "h-1.5 bg-far",
 };
 
 /**
- * Two bars under the date — left Sáng, right Chiều — violet when that slot
+ * Two bars under the date — left Sáng, right Chiều — red when that slot
  * went to a far province, plus a honey dot when a sample was taken that day.
  * Still legible in a ~48px cell on a 390px screen.
  */

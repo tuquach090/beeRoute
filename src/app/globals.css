@@ -85,9 +85,10 @@
   --tint: #e8f0ff;
   --tint-foreground: #1b3ba8;
 
-  /* Trips "đi tỉnh xa" on the calendar. Violet so it reads apart from the
-     blue of an ordinary trip and the honey of a sample. */
-  --far: #6d28d9;
+  /* Trips "đi tỉnh xa" on the calendar. A warm red, opposite the blue of an
+     ordinary trip on the colour wheel and well clear of the honey of a
+     sample. Violet was tried first and read too close to the blue. */
+  --far: #e11d48;
   --far-foreground: #ffffff;
 
   /* --border is decorative (card edges); --input outlines form fields and so
@@ -121,7 +122,7 @@
   --tint: #1e2536;
   --tint-foreground: #c9d6ff;
 
-  --far: #a78bfa;
+  --far: #f43f5e;
   --far-foreground: #1c1a17;
 
   --border: #272c3a;

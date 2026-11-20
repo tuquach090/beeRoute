@@ -200,7 +200,7 @@ Lưới tháng, chọn một ngày thì hiện khung **Sáng** và **Chiều**, 
 chính và các chuyến phụ.
 
 **Dưới mỗi ngày** (thêm 20/11/2026): hai vạch Sáng/Chiều — **xanh** = có chuyến,
-**tím và dày hơn** = đi tỉnh xa — cộng **chấm vàng mật** nếu hôm đó có lấy mẫu. Có chú
+**đỏ và dày hơn** = đi tỉnh xa — cộng **chấm vàng mật** nếu hôm đó có lấy mẫu. Có chú
 thích màu dưới lịch, và mỗi ô có `aria-label` đọc thành lời. Ngày đang chọn dùng
 nền nhạt + viền xanh chứ không tô đặc, để màu các vạch không bị nuốt.
 
@@ -212,8 +212,8 @@ nền nhạt + viền xanh chứ không tô đặc, để màu các vạch khôn
 hiện trong app để nhãn khớp với số ghi bên cạnh; 60km chim bay ≈ 75–80km đường thật.
 Tính lúc đọc, không lưu cột nào.
 
-Màu tím là token `--far` / `--far-foreground` mới (`#6D28D9` sáng, `#A78BFA` tối), đã
-thêm vào `npm run check:contrast`. Chấm vàng mật chỉ đạt 1.6:1 trên nền trắng nên
+Màu đỏ là token `--far` / `--far-foreground` (`#E11D48` sáng, `#F43F5E` tối), đã có
+trong `npm run check:contrast`. Đã thử tím trước nhưng nhìn lẫn với xanh. Chấm vàng mật chỉ đạt 1.6:1 trên nền trắng nên
 **phải giữ viền đen than** (`ring-foreground`).
 
 ## 6. Module tối ưu tuyến — ĐÃ LÀM
