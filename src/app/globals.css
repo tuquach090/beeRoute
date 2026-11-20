@@ -17,6 +17,8 @@
   --color-ink: #1c1a17;
   --color-tint: var(--tint);
   --color-tint-foreground: var(--tint-foreground);
+  --color-far: var(--far);
+  --color-far-foreground: var(--far-foreground);
 
   /* Semantic surfaces — these flip between light and dark. */
   --color-background: var(--background);
@@ -83,6 +85,11 @@
   --tint: #e8f0ff;
   --tint-foreground: #1b3ba8;
 
+  /* Trips "đi tỉnh xa" on the calendar. Violet so it reads apart from the
+     blue of an ordinary trip and the honey of a sample. */
+  --far: #6d28d9;
+  --far-foreground: #ffffff;
+
   /* --border is decorative (card edges); --input outlines form fields and so
      must clear the 3:1 non-text contrast bar on its own. */
   --border: #dce3f2;
@@ -113,6 +120,9 @@
 
   --tint: #1e2536;
   --tint-foreground: #c9d6ff;
+
+  --far: #a78bfa;
+  --far-foreground: #1c1a17;
 
   --border: #272c3a;
   --input: #5c677e;

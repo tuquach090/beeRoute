@@ -2,7 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  FlaskConical,
+  Plus,
+  Truck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { vi } from "@/lib/i18n/vi";
@@ -12,6 +19,7 @@ import {
   parseIsoDate,
   type YearMonth,
 } from "@/lib/dates/vn-date";
+import { dayMarks, type DayMarks, type SlotMark } from "@/lib/trips/classify";
 import type { TripSummary } from "@/lib/trips/queries";
 import type { TripSlot } from "@/types/database";
 
@@ -86,7 +94,7 @@ export function TripCalendar({ month, today, trips, initialSelected }: Props) {
 
         <div className="grid grid-cols-7 gap-0.5">
           {cells.map((cell) => {
-            const dayTrips = byDay.get(cell.iso) ?? [];
+            const marks = dayMarks(byDay.get(cell.iso) ?? []);
             const isSelected = cell.iso === selected;
             const isToday = cell.iso === today;
 
@@ -97,29 +105,34 @@ export function TripCalendar({ month, today, trips, initialSelected }: Props) {
                 onClick={() => setSelected(cell.iso)}
                 aria-pressed={isSelected}
                 aria-current={isToday ? "date" : undefined}
+                aria-label={vi.calendar.dayLabel(cell.day, marks)}
                 className={cn(
                   // 44px minimum so it is comfortably tappable one-handed.
                   "flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg py-1 transition-colors",
                   !cell.inMonth && "text-muted-foreground/40",
+                  // A ring on a pale fill rather than a solid blue cell, so the
+                  // coloured marks underneath keep their meaning when selected.
                   isSelected
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-tint text-tint-foreground ring-primary ring-2"
                     : "hover:bg-muted",
                 )}
               >
                 <span
                   className={cn(
                     "tnum text-sm",
-                    isToday && !isSelected && "text-primary font-bold",
+                    isToday && "text-primary font-bold",
                     isSelected && "font-bold",
                   )}
                 >
                   {cell.day}
                 </span>
-                <SlotMarks trips={dayTrips} selected={isSelected} />
+                <DayMarksView marks={marks} />
               </button>
             );
           })}
         </div>
+
+        <Legend />
       </div>
 
       <DayDetail date={selected} trips={byDay.get(selected) ?? []} />
@@ -131,38 +144,53 @@ function monthHref(ym: YearMonth) {
   return `/trips?m=${ym.year}-${String(ym.month).padStart(2, "0")}`;
 }
 
-/**
- * Two bars under the date: left for Sáng, right for Chiều, filled when that
- * slot has a trip. More informative than a single dot, and still legible in a
- * ~48px cell on a 390px screen.
- */
-function SlotMarks({
-  trips,
-  selected,
-}: {
-  trips: TripSummary[];
-  selected: boolean;
-}) {
-  const has = (slot: TripSlot) => trips.some((t) => t.slot === slot);
+const SLOT_BAR: Record<SlotMark, string> = {
+  none: "h-1 bg-border",
+  trip: "h-1 bg-primary",
+  // Thicker as well as violet, so it does not rest on colour alone.
+  far: "h-1.5 bg-far",
+};
 
+/**
+ * Two bars under the date — left Sáng, right Chiều — violet when that slot
+ * went to a far province, plus a honey dot when a sample was taken that day.
+ * Still legible in a ~48px cell on a 390px screen.
+ */
+function DayMarksView({ marks }: { marks: DayMarks }) {
   return (
-    <span className="flex gap-0.5" aria-hidden>
-      {(["morning", "afternoon"] as const).map((slot) => (
-        <span
-          key={slot}
-          className={cn(
-            "h-1 w-2.5 rounded-full",
-            has(slot)
-              ? selected
-                ? "bg-primary-foreground"
-                : "bg-primary"
-              : selected
-                ? "bg-primary-foreground/25"
-                : "bg-border",
-          )}
-        />
-      ))}
+    <span className="flex h-2 items-center gap-0.5" aria-hidden>
+      <span className={cn("w-2.5 rounded-full", SLOT_BAR[marks.morning])} />
+      <span className={cn("w-2.5 rounded-full", SLOT_BAR[marks.afternoon])} />
+      {marks.sample && <SampleDot />}
     </span>
+  );
+}
+
+/** Honey is 1.6:1 on white, so the ink ring is what makes it visible. */
+function SampleDot() {
+  return (
+    <span className="bg-honey ring-foreground ml-0.5 size-1.5 rounded-full ring-1" />
+  );
+}
+
+function Legend() {
+  return (
+    <ul className="text-muted-foreground mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t px-1 pt-2 text-xs">
+      <li className="flex items-center gap-1.5">
+        <span className="bg-primary h-1 w-2.5 rounded-full" aria-hidden />
+        {vi.calendar.legendTrip}
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span className="bg-far h-1.5 w-2.5 rounded-full" aria-hidden />
+        {vi.calendar.legendFar}
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span aria-hidden className="flex">
+          <SampleDot />
+        </span>
+        {vi.calendar.legendSample}
+      </li>
+    </ul>
   );
 }
 
@@ -246,17 +274,58 @@ function SlotBlock({
 }
 
 function TripCard({ trip }: { trip: TripSummary }) {
+  const allDelivered =
+    trip.stop_count > 0 && trip.delivered_count === trip.stop_count;
+
   return (
     <Link
       href={`/trips/${trip.id}`}
-      className="hover:bg-muted flex items-center justify-between gap-3 rounded-xl border p-3 transition-colors"
+      className={cn(
+        "hover:bg-muted flex items-center justify-between gap-3 rounded-xl border p-3 transition-colors",
+        // A coloured edge echoes the calendar mark for far trips.
+        trip.is_far && "border-l-far border-l-4",
+      )}
     >
-      <span className="min-w-0">
-        <span className="block text-sm font-medium">
-          {vi.trips.stopCount(trip.stop_count)}
+      <span className="min-w-0 flex-1 space-y-1.5">
+        <span className="flex items-baseline justify-between gap-2">
+          <span className="text-sm font-medium">
+            {vi.trips.stopCount(trip.stop_count)}
+          </span>
+          <span className="tnum text-muted-foreground shrink-0 text-xs">
+            {vi.trips.straightKm(trip.total_straight_km.toFixed(1))}
+          </span>
         </span>
-        <span className="tnum text-muted-foreground mt-0.5 block text-xs">
-          {vi.trips.straightKm(trip.total_straight_km.toFixed(1))}
+
+        {trip.stop_names.length > 0 && (
+          <span className="text-muted-foreground line-clamp-2 block text-xs leading-5">
+            {trip.stop_names.join(" → ")}
+          </span>
+        )}
+
+        <span className="flex flex-wrap gap-1.5">
+          {trip.is_far && (
+            <span className="bg-far text-far-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold">
+              <Truck className="size-3" aria-hidden />
+              {vi.trips.far}
+            </span>
+          )}
+          {trip.sample_count > 0 && (
+            <span className="bg-accent text-accent-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold">
+              <FlaskConical className="size-3" aria-hidden />
+              {vi.trips.sampleBadge(trip.sample_count, trip.stop_count)}
+            </span>
+          )}
+          <span
+            className={cn(
+              "tnum inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              allDelivered
+                ? "bg-tint text-tint-foreground"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            <Check className="size-3" aria-hidden />
+            {vi.trips.deliveredCount(trip.delivered_count, trip.stop_count)}
+          </span>
         </span>
       </span>
       <ChevronRight

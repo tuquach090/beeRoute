@@ -52,6 +52,10 @@ Hằng số thương hiệu, giống nhau ở cả hai chế độ:
 | `honey`       | `#FFC21A` | Điểm nhấn, huy hiệu đếm số         |
 | `ink`         | `#1C1A17` | Chữ trên nền sáng và trên nền vàng |
 
+Một màu ngữ nghĩa ngoài bảng thương hiệu: **`far`** (tím, `#6D28D9` sáng / `#A78BFA`
+tối) đánh dấu chuyến đi tỉnh xa trên lịch. Chọn tím để tách khỏi xanh (có chuyến)
+và vàng mật (có mẫu). Vạch tỉnh xa còn **dày hơn**, để không chỉ dựa vào màu.
+
 Token ngữ nghĩa (đổi theo chế độ) nằm ở `src/app/globals.css`. Hai điểm đáng chú ý:
 
 - **Trên nền vàng mật luôn dùng chữ đen than.** Chữ trắng trên `#FFC21A` chỉ đạt

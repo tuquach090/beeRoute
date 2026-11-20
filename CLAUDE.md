@@ -194,6 +194,28 @@ và `profiles` đã có sẵn RLS chỉ-chủ-sở-hữu.
 không điền được vào đâu mà trông vẫn như đã lưu. Ràng buộc nằm ở cả `check` trong
 database lẫn `.refine` trong `src/lib/validation/settings.ts`.
 
+### 5.5 Lịch chuyến (`/trips`) — ĐÃ LÀM
+
+Lưới tháng, chọn một ngày thì hiện khung **Sáng** và **Chiều**, mỗi khung một chuyến
+chính và các chuyến phụ.
+
+**Dưới mỗi ngày** (thêm 20/11/2026): hai vạch Sáng/Chiều — **xanh** = có chuyến,
+**tím và dày hơn** = đi tỉnh xa — cộng **chấm vàng mật** nếu hôm đó có lấy mẫu. Có chú
+thích màu dưới lịch, và mỗi ô có `aria-label` đọc thành lời. Ngày đang chọn dùng
+nền nhạt + viền xanh chứ không tô đặc, để màu các vạch không bị nuốt.
+
+**Thẻ chuyến** hiện: số điểm, km, tên các điểm theo thứ tự, nhãn **Tỉnh xa**, nhãn
+**Có mẫu** (kèm số điểm lấy mẫu), và **Đã giao x/y**.
+
+**Tỉnh xa = đúng 1 điểm và `total_straight_km` > 60** (`FAR_TRIP_MIN_KM` trong
+`src/lib/trips/classify.ts`) — luật của chủ dự án. Dùng đúng con số chim bay đang
+hiện trong app để nhãn khớp với số ghi bên cạnh; 60km chim bay ≈ 75–80km đường thật.
+Tính lúc đọc, không lưu cột nào.
+
+Màu tím là token `--far` / `--far-foreground` mới (`#6D28D9` sáng, `#A78BFA` tối), đã
+thêm vào `npm run check:contrast`. Chấm vàng mật chỉ đạt 1.6:1 trên nền trắng nên
+**phải giữ viền đen than** (`ring-foreground`).
+
 ## 6. Module tối ưu tuyến — ĐÃ LÀM
 
 `src/lib/route-optimizer/`. **Thuần TypeScript**, không phụ thuộc React, Next.js hay
@@ -462,7 +484,7 @@ Nếu sau này cần tìm theo tên trong app, dùng **Google Places API** (tố
 | **6. Hoàn thiện** | Trạng thái loading/lỗi/rỗng, kiểm tra trên điện thoại thật | ✅ xong |
 | **7. Chuyến** | Lưu chuyến, lịch tra cứu, ảnh chứng từ, lấy mẫu, đã giao | ✅ xong |
 | **8. Cài đặt + luật bên phải** | Bỏ điểm kết thúc, điểm bắt đầu mặc định, tối ưu theo hành lang | ✅ xong; luật bên phải gỡ ở GĐ 9 |
-| **9. Mã cổng + gộp + core mới** | Ảnh mã vào cổng, gộp công ty trùng, hộp thông tin công ty, core gần nhất trước | ⏳ đang làm |
+| **9. Mã cổng + gộp + core mới** | Ảnh mã vào cổng, gộp công ty trùng, hộp thông tin công ty, core gần nhất trước, tìm công ty, lịch có mẫu/tỉnh xa | ⏳ đang làm |
 
 Đã deploy: GitHub `tuquach090/beeRoute` → Vercel tự build khi push `main`.
 
@@ -497,7 +519,7 @@ src/
     supabase/                       client / server / middleware / env
     companies/                      queries.ts (đọc) + actions.ts (ghi, gộp) + storage.ts (đường dẫn ảnh mã cổng)
                                     + match.ts (tìm không dấu, chặn tên trùng), có test
-    trips/                          queries/actions + storage.ts (đường dẫn ảnh)
+    trips/                          queries/actions + storage.ts (đường dẫn ảnh) + classify.ts (tỉnh xa, có test)
     settings/                       queries/actions + types.ts (điểm bắt đầu mặc định)
     dates/vn-date.ts                múi giờ VN + lưới lịch, có test
     images/compress.ts              nén ảnh bằng canvas, có test

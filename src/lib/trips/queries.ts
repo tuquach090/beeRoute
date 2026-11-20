@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { monthRange, type YearMonth } from "@/lib/dates/vn-date";
 import { signGatePhotos } from "@/lib/companies/queries";
+import { isFarTrip } from "./classify";
 import { PHOTO_BUCKET, SIGNED_URL_TTL_SECONDS } from "./storage";
 import type {
   PhotoKind,
@@ -18,6 +19,13 @@ export type TripSummary = {
   total_straight_km: number;
   method: TripMethod;
   stop_count: number;
+  /** Stop names in route order, for the card on the calendar. */
+  stop_names: string[];
+  /** Stops where a sample was taken. */
+  sample_count: number;
+  delivered_count: number;
+  /** One stop beyond FAR_TRIP_MIN_KM — see classify.ts. */
+  is_far: boolean;
 };
 
 export type TripStopPhotoView = {
@@ -101,7 +109,7 @@ export async function listTripsForMonth(ym: YearMonth): Promise<TripSummary[]> {
   const { data, error } = await supabase
     .from("trips")
     .select(
-      "id, trip_date, slot, slot_position, total_straight_km, method, trip_stops(id)",
+      "id, trip_date, slot, slot_position, total_straight_km, method, trip_stops(id, sort_order, display_name, sample_taken, delivered_at)",
     )
     .eq("user_id", user.id)
     .gte("trip_date", from)
@@ -111,8 +119,19 @@ export async function listTripsForMonth(ym: YearMonth): Promise<TripSummary[]> {
 
   if (error) throw new Error(error.message);
 
+  type RawStop = {
+    id: string;
+    sort_order: number;
+    display_name: string;
+    sample_taken: boolean;
+    delivered_at: string | null;
+  };
+
   return (data ?? []).map((row) => {
-    const r = row as unknown as TripSummary & { trip_stops: { id: string }[] };
+    const r = row as unknown as TripSummary & { trip_stops: RawStop[] };
+    const stops = [...(r.trip_stops ?? [])].sort(
+      (a, b) => a.sort_order - b.sort_order,
+    );
     return {
       id: r.id,
       trip_date: r.trip_date,
@@ -120,7 +139,11 @@ export async function listTripsForMonth(ym: YearMonth): Promise<TripSummary[]> {
       slot_position: r.slot_position,
       total_straight_km: r.total_straight_km,
       method: r.method,
-      stop_count: r.trip_stops?.length ?? 0,
+      stop_count: stops.length,
+      stop_names: stops.map((s) => s.display_name),
+      sample_count: stops.filter((s) => s.sample_taken).length,
+      delivered_count: stops.filter((s) => s.delivered_at !== null).length,
+      is_far: isFarTrip(stops.length, r.total_straight_km),
     };
   });
 }

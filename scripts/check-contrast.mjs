@@ -21,6 +21,13 @@ const PAIRS = {
     ["chữ nút xoá", "#FFFFFF", "#D92D20"],
     ["viền ô nhập / thẻ [UI 3:1]", "#878FA3", "#FFFFFF"],
     ["viền ô nhập / nền trang [UI 3:1]", "#878FA3", "#F4F7FE"],
+    ["chữ trên tím tỉnh xa", "#FFFFFF", "#6D28D9"],
+    ["vạch có chuyến / thẻ [UI 3:1]", "#2F5BEA", "#FFFFFF"],
+    ["vạch có chuyến / ngày đang chọn [UI 3:1]", "#2F5BEA", "#E8F0FF"],
+    ["vạch tỉnh xa / thẻ [UI 3:1]", "#6D28D9", "#FFFFFF"],
+    ["vạch tỉnh xa / ngày đang chọn [UI 3:1]", "#6D28D9", "#E8F0FF"],
+    // The honey dot itself is only 1.6:1 on white; its ink ring carries it.
+    ["viền chấm mẫu / thẻ [UI 3:1]", "#1C1A17", "#FFFFFF"],
   ],
   TỐI: [
     ["chữ thường / nền trang", "#ECEFF6", "#101218"],
@@ -33,6 +40,13 @@ const PAIRS = {
     ["chữ nút xoá", "#1C1A17", "#F0584B"],
     ["viền ô nhập / thẻ [UI 3:1]", "#5C677E", "#181B23"],
     ["viền ô nhập / nền trang [UI 3:1]", "#5C677E", "#101218"],
+    ["chữ trên tím tỉnh xa", "#1C1A17", "#A78BFA"],
+    ["vạch có chuyến / thẻ [UI 3:1]", "#3F66F0", "#181B23"],
+    ["vạch có chuyến / ngày đang chọn [UI 3:1]", "#3F66F0", "#1E2536"],
+    ["vạch tỉnh xa / thẻ [UI 3:1]", "#A78BFA", "#181B23"],
+    ["vạch tỉnh xa / ngày đang chọn [UI 3:1]", "#A78BFA", "#1E2536"],
+    ["chấm mẫu / thẻ [UI 3:1]", "#FFC21A", "#181B23"],
+    ["chấm mẫu / ngày đang chọn [UI 3:1]", "#FFC21A", "#1E2536"],
   ],
 };
 

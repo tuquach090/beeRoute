@@ -1,3 +1,5 @@
+import type { DayMarks, SlotMark } from "@/lib/trips/classify";
+
 /**
  * Every user-facing string in the app. Code stays in English (CLAUDE.md §3.6);
  * only this file holds Vietnamese, so a second locale is a sibling file later.
@@ -220,6 +222,24 @@ export const vi = {
     prevMonth: "Tháng trước",
     nextMonth: "Tháng sau",
     today: "Hôm nay",
+    legendTrip: "Có chuyến",
+    legendFar: "Đi tỉnh xa",
+    legendSample: "Có lấy mẫu",
+    /** Read by screen readers instead of the bare date and coloured marks. */
+    dayLabel: (day: number, marks: DayMarks) => {
+      const slot = (name: string, m: SlotMark) =>
+        m === "none"
+          ? null
+          : m === "far"
+            ? `${name} đi tỉnh xa`
+            : `${name} có chuyến`;
+      const parts = [
+        slot("sáng", marks.morning),
+        slot("chiều", marks.afternoon),
+        marks.sample ? "có lấy mẫu" : null,
+      ].filter(Boolean);
+      return parts.length ? `Ngày ${day}: ${parts.join(", ")}` : `Ngày ${day}`;
+    },
   },
 
   trips: {
@@ -232,6 +252,11 @@ export const vi = {
     createHere: "Tạo chuyến",
     stopCount: (n: number) => `${n} điểm`,
     straightKm: (km: string) => `${km} km chim bay`,
+    far: "Tỉnh xa",
+    sampleBadge: (samples: number, stops: number) =>
+      stops === 1 ? "Có mẫu" : `Có mẫu · ${samples} điểm`,
+    deliveredCount: (done: number, total: number) =>
+      done === total ? "Đã giao hết" : `Đã giao ${done}/${total}`,
     openTrip: "Xem chuyến",
     pickADay: "Chọn một ngày để xem chuyến.",
     delete: "Xoá chuyến",
