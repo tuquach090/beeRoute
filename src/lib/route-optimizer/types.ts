@@ -7,23 +7,14 @@ export type OptimizeInput = {
   /** Destinations. Ids must be unique. */
   stops: Stop[];
   /**
-   * Optional fixed end point.
+   * Optional fixed end point. It does not influence the order — the next
+   * stop is always the nearest one left — it only adds a final leg.
    *
    * Ad-hoc routes leave this out: the round finishes at the last delivery,
    * and forcing a leg back to a depot would report kilometres nobody rides.
    * Trips saved before the end point was dropped still carry one.
    */
   end?: LatLng | null;
-};
-
-/** What the corridor rule did, for the note shown under the result. */
-export type CorridorSummary = {
-  lengthKm: number;
-  bearingDeg: number;
-  /** How many times the route reverses direction along the corridor. */
-  uTurns: number;
-  /** False when the stops could not be sorted onto two kerbs. */
-  sidesKnown: boolean;
 };
 
 export type OptimizeResult = {
@@ -36,13 +27,10 @@ export type OptimizeResult = {
    */
   legsKm: number[];
   totalKm: number;
-  method: "exact" | "heuristic";
-  /** Set when the stops lay along one road and the sweep rule applied. */
-  corridor: CorridorSummary | null;
+  /**
+   * Always "heuristic" now: nearest-neighbour makes no claim to the shortest
+   * order. The type stays a string literal because saved trips store it, and
+   * trips from before 20/11/2026 may say "exact".
+   */
+  method: "heuristic";
 };
-
-/**
- * Above this many destinations, trying every permutation stops being viable
- * (9! = 362,880 orders × 10 legs each). CLAUDE.md §6.2 sets the threshold.
- */
-export const EXACT_MAX_STOPS = 8;

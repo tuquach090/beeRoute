@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { monthRange, type YearMonth } from "@/lib/dates/vn-date";
+import { signGatePhotos } from "@/lib/companies/queries";
 import { PHOTO_BUCKET, SIGNED_URL_TTL_SECONDS } from "./storage";
 import type {
   PhotoKind,
@@ -44,6 +45,19 @@ export type TripStopView = {
   photos: TripStopPhotoView[];
   /** Read live from companies, so a mid-route call uses today's number. */
   contacts: { id: string; contact_name: string | null; phone: string | null }[];
+  /**
+   * The company as it is today, for the info sheet behind the stop's name.
+   * Null when the company was deleted after the trip.
+   */
+  company: TripStopCompany | null;
+};
+
+export type TripStopCompany = {
+  display_name: string;
+  address: string;
+  note: string | null;
+  /** Signed, expires after SIGNED_URL_TTL_SECONDS. */
+  gate_photo_url: string | null;
 };
 
 export type TripDetail = {
@@ -123,7 +137,7 @@ export async function getTrip(id: string): Promise<TripDetail | null> {
   if (error) throw new Error(error.message);
   if (!data) return null;
 
-  type RawStop = Omit<TripStopView, "photos" | "contacts"> & {
+  type RawStop = Omit<TripStopView, "photos" | "contacts" | "company"> & {
     trip_stop_photos: Omit<TripStopPhotoView, "signed_url">[];
   };
   const raw = data as unknown as Omit<TripDetail, "stops"> & {
@@ -148,26 +162,61 @@ export async function getTrip(id: string): Promise<TripDetail | null> {
     }
   }
 
-  // Contacts come from the live company row, not the snapshot: a rider
-  // standing at the gate wants today's phone number.
-  const companyIds = stops
-    .map((s) => s.company_id)
-    .filter((v): v is string => Boolean(v));
+  // Contacts, note and gate photo come from the live company row, not the
+  // snapshot: a rider standing at the gate wants today's phone number and
+  // today's gate code.
+  const companyIds = [
+    ...new Set(
+      stops.map((s) => s.company_id).filter((v): v is string => Boolean(v)),
+    ),
+  ];
   const contactsByCompany = new Map<
     string,
     { id: string; contact_name: string | null; phone: string | null }[]
   >();
+  const companyById = new Map<string, TripStopCompany>();
   if (companyIds.length > 0) {
-    const { data: contacts } = await supabase
-      .from("company_contacts")
-      .select("id, company_id, contact_name, phone, sort_order")
-      .in("company_id", companyIds)
-      .order("sort_order", { ascending: true });
+    const { data: companies } = await supabase
+      .from("companies")
+      .select(
+        "id, display_name, address, note, gate_photo_path, company_contacts(id, contact_name, phone, sort_order)",
+      )
+      .in("id", companyIds);
 
-    for (const c of contacts ?? []) {
-      const list = contactsByCompany.get(c.company_id) ?? [];
-      list.push({ id: c.id, contact_name: c.contact_name, phone: c.phone });
-      contactsByCompany.set(c.company_id, list);
+    type RawCompany = {
+      id: string;
+      display_name: string;
+      address: string;
+      note: string | null;
+      gate_photo_path: string | null;
+      company_contacts: {
+        id: string;
+        contact_name: string | null;
+        phone: string | null;
+        sort_order: number;
+      }[];
+    };
+    const rows = (companies ?? []) as unknown as RawCompany[];
+    const gateUrls = await signGatePhotos(
+      supabase,
+      rows.map((c) => c.gate_photo_path),
+    );
+
+    for (const c of rows) {
+      contactsByCompany.set(
+        c.id,
+        [...(c.company_contacts ?? [])]
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map(({ id, contact_name, phone }) => ({ id, contact_name, phone })),
+      );
+      companyById.set(c.id, {
+        display_name: c.display_name,
+        address: c.address,
+        note: c.note,
+        gate_photo_url: c.gate_photo_path
+          ? (gateUrls.get(c.gate_photo_path) ?? null)
+          : null,
+      });
     }
   }
 
@@ -202,6 +251,7 @@ export async function getTrip(id: string): Promise<TripDetail | null> {
         .sort((a, b) => a.taken_at.localeCompare(b.taken_at))
         .map((p) => ({ ...p, signed_url: signed.get(p.storage_path) ?? null })),
       contacts: s.company_id ? (contactsByCompany.get(s.company_id) ?? []) : [],
+      company: s.company_id ? (companyById.get(s.company_id) ?? null) : null,
     })),
   };
 }

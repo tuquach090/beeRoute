@@ -66,6 +66,16 @@ export const companySchema = z.object({
     .nullish()
     .transform((v) => (v ? v : null)),
   isPublic: z.boolean(),
+  /**
+   * Storage path of the "mã vào cổng" photo, or null for none. The browser
+   * uploads the file itself and sends back only the path; the server action
+   * checks it lies in the caller's own folder.
+   */
+  gatePhotoPath: z
+    .string()
+    .trim()
+    .nullish()
+    .transform((v) => (v ? v : null)),
   contacts: z
     .array(contactSchema)
     .max(20, "Tối đa 20 dòng liên hệ")

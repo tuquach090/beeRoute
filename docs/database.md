@@ -74,6 +74,25 @@ is_public boolean not null default false
 Tên là `is_public` chứ không phải `public` vì `public` cũng là tên schema trong
 Postgres — viết `public` trần trong một policy đọc rất mơ hồ.
 
+Từ `20261120000001` thêm **ảnh mã vào cổng**:
+
+```sql
+gate_photo_path text   -- null = chưa có ảnh
+check (gate_photo_path is null or split_part(gate_photo_path, '/', 1) = user_id::text)
+```
+
+Một cột chứ không phải bảng, vì chủ dự án chốt **mỗi công ty một ảnh** và không
+muốn thêm bảng. Cột giữ **đường dẫn** trong bucket `delivery-photos`
+(`<user_id>/companies/<uuid>.jpg`), không phải URL: bucket private, URL là signed
+URL sinh lúc đọc. Check ở trên lặp lại đúng điều kiện của policy bucket — một
+hàng trỏ vào thư mục người khác là một ảnh chủ của nó không bao giờ mở hay xoá
+được.
+
+Ảnh được ghi bằng một câu `update` riêng sau `save_company`, **không** thêm tham
+số vào hàm: đổi chữ ký nghĩa là khai báo hàm lần hai (quy tắc 3.8 CLAUDE.md). Cái
+giá là hai lần ghi không chung transaction — lần sau hỏng thì công ty đã lưu mà
+chưa có ảnh, và trình duyệt xoá file vừa tải.
+
 ### `company_contacts`
 
 Bảng con, `on delete cascade` theo `companies`. Xoá công ty là mất luôn liên hệ.
@@ -97,6 +116,39 @@ Muốn siết lại sau này thì sửa đúng hai chỗ:
    chia sẻ, hoặc tạo một view chỉ lộ `display_name, address, lat, lng`.
 2. Policy `company_contacts_select_via_company` — bỏ `or c.is_public` để giữ
    riêng số điện thoại trong khi vẫn cho người khác thấy tên và địa chỉ.
+
+## Gộp công ty — `merge_companies(p_target_id, p_source_ids)`
+
+Migration `20261120000001`. Gộp các công ty nguồn vào công ty giữ lại rồi xoá
+nguồn, **trong một transaction**:
+
+| Dữ liệu của công ty nguồn | Đi đâu |
+|---|---|
+| Liên hệ | Chuyển sang, bỏ dòng trùng (cùng số; dòng chỉ có tên thì cùng tên, không phân biệt hoa thường) — trùng với công ty giữ lại lẫn trùng giữa các nguồn với nhau |
+| Ghi chú | Nối vào cuối ghi chú công ty giữ lại, bỏ ghi chú rỗng và trùng y hệt |
+| Ảnh mã vào cổng | Công ty giữ lại có ảnh thì giữ ảnh đó; không có thì lấy ảnh của nguồn đầu tiên (theo thứ tự trong `p_source_ids`) có ảnh |
+| `trip_stops` | Trỏ `company_id` về công ty giữ lại **và ghi đè snapshot** tên/địa chỉ/toạ độ |
+
+**Ghi đè snapshot là cố ý và là chỗ duy nhất được làm vậy.** Ở mọi nơi khác
+`trip_stops` giữ nguyên thông tin lúc chạy. Nhưng gộp nghĩa là các công ty đó
+vốn là một — nhập trùng — nên chủ dự án muốn chuyến cũ hiện đúng một tên.
+
+Kiểm tra chủ sở hữu **tường minh** (`user_id = auth.uid()`), không phó mặc RLS:
+RLS cho *đọc* công ty `is_public` của người khác, và gộp công ty người khác vào
+của mình phải báo lỗi rõ chứ không được chạy nửa vời.
+
+Chuyến của **người khác** từng ghé một công ty nguồn (khi nó `is_public`) không bị
+sửa — RLS trên `trip_stops` chặn — và chỉ mất `company_id` khi nguồn bị xoá, y như
+xoá thường.
+
+Hàm trả về `text[]` các đường dẫn ảnh không còn hàng nào trỏ tới. Server action
+xoá các file đó **sau khi** transaction xong — ngược quy tắc "xoá file trước" ở
+mục Storage, có chủ ý: gộp hỏng giữa chừng thì không được mất ảnh mà các công ty
+vẫn đang hiện. Xoá file hỏng thì file thành rác (xem Chưa làm).
+
+Không `security definer`, `revoke all from public, anon`, `grant execute to
+authenticated`, lỗi tiếng Việt — như `save_company` và `save_trip`. Đã chạy thử
+bằng PGlite: gộp trùng liên hệ, ghi chú, ảnh, snapshot, và bốn trường hợp từ chối.
 
 ## Chuyến (`trips`, `trip_stops`, `trip_stop_photos`)
 
@@ -142,8 +194,8 @@ Bốn cái tên ở trên đều là quyết định, không phải mặc địn
 - **`total_straight_km`, không phải `total_km`.** Mục 6.2 CLAUDE.md nhấn mạnh đây
   là khoảng cách **đường chim bay**, chỉ dùng để sắp thứ tự. Tên cột giữ luôn
   cảnh báo đó, kẻo người đọc sau hiểu thành quãng đường thật.
-- **`method`** ghi lại thuật toán đã dùng (`exact` khi ≤ 8 điểm, `heuristic` khi
-  nhiều hơn), để sau này đọc lại biết con số km đáng tin tới đâu.
+- **`method`** ghi lại thuật toán đã dùng. Từ 20/11/2026 luôn là `heuristic`
+  (gần nhất trước); chuyến cũ có thể ghi `exact` (duyệt hết hoán vị, ≤ 8 điểm).
 
 ### `trip_stops`
 
@@ -218,6 +270,9 @@ Bucket `delivery-photos`, **private**.
 
 Đường dẫn: `<user_id>/<trip_id>/<stop_id>/<uuid>.jpg`
 
+Ảnh mã vào cổng dùng chung bucket: `<user_id>/companies/<uuid>.jpg`. Segment thứ
+hai `companies` không đụng được thư mục chuyến, vốn là uuid.
+
 **Segment đầu bắt buộc là `user_id`**, vì cả bốn policy trên `storage.objects`
 phân quyền bằng `(storage.foldername(name))[1] = auth.uid()::text`. Đổi cấu trúc
 đường dẫn thì upload hỏng với lỗi quyền không chỉ về đâu.
@@ -238,6 +293,13 @@ Hai quy tắc bắt buộc, cả hai đều về file rác:
 2. **Xoá chuyến/ảnh thì xoá file trước, xoá hàng sau.** Cascade của khoá ngoại
    chỉ xoá hàng trong DB; Postgres không biết gì về bucket.
 
+   Hai ngoại lệ, cùng một lý do — công ty không được trỏ vào file đã mất:
+   **đổi** ảnh mã vào cổng (ghi hàng mới trước, xoá file cũ sau) và **gộp công
+   ty** (xoá file thừa sau khi transaction xong).
+
+Ảnh mã vào cổng **chỉ tải lên lúc bấm Lưu**, không phải lúc chọn, để chọn rồi bỏ
+ngang không để lại file rác.
+
 Dung lượng: gói free cho 1GB. Nén về cạnh dài 1600px / JPEG 0.8 đưa ảnh 2.5MB
 xuống ~300KB. Với 2 chuyến/ngày × 7 điểm × 2 ảnh thì khoảng 3,5 tháng mới đầy.
 Nút duy nhất cần xoay nếu muốn gấp đôi thời gian đó: `MAX_EDGE_PX` 1600 → 1280.
@@ -251,6 +313,7 @@ là không đọc được gì.
 |---|---|---|
 | `profiles` | dòng của chính mình | sửa dòng của chính mình; insert do trigger |
 | `companies` | của mình **hoặc** `is_public = true` | chỉ chủ sở hữu |
+| *(bucket)* ảnh mã vào cổng | **chỉ chủ thư mục**, kể cả khi công ty `is_public` | chỉ chủ thư mục |
 | `company_contacts` | theo đúng quyền đọc của công ty cha | chỉ chủ sở hữu công ty cha |
 | `trips` | **chỉ của mình** | chỉ của mình |
 | `trip_stops` | theo quyền đọc chuyến cha | chỉ chủ sở hữu chuyến cha |
@@ -320,7 +383,9 @@ Sửa migration thì nhớ sinh lại, nếu không type sẽ nói dối.
 - **Thống kê theo tuần/tháng** (đếm chuyến, tổng km, tính lương) — dữ liệu đã
   đủ trong `trips`, chỉ còn thiếu màn hình.
 - **Giao diện tìm công ty `is_public` của người khác** — cờ và policy đã có từ
-  đầu, chưa có chỗ nào trong app dùng tới.
+  đầu, chưa có chỗ nào trong app dùng tới. Làm màn hình này thì phải quyết lại
+  ảnh mã vào cổng: người khác đọc được `gate_photo_path` nhưng policy bucket
+  không cho mở file.
 
 (Hai mục cũ — RPC `save_company` và migration transaction — đã xong, xem
 `20261018000004_fix_contact_without_phone.sql`.)

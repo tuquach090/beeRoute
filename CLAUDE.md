@@ -10,7 +10,7 @@
 
 ## 1. Bối cảnh
 
-- **BeeRoute** là ứng dụng web giúp người giao hàng **sắp xếp thứ tự các điểm giao sao cho tổng quãng đường ngắn nhất**, rồi mở tuyến đã tối ưu trên Google Maps để chạy.
+- **BeeRoute** là ứng dụng web giúp người giao hàng **sắp xếp thứ tự các điểm giao theo kiểu gần trước, xa sau** (mục 6.2), rồi mở tuyến đã sắp trên Google Maps để chạy.
 - Giai đoạn này là **MVP cho chính chủ dự án dùng hằng ngày** (một shipper chạy xe máy ở TP.HCM, mỗi ngày 2 chuyến, mỗi chuyến khoảng 5–10 điểm). Chưa làm multi-tenant, chưa làm SaaS.
 - Người dùng chủ yếu thao tác **trên điện thoại, một tay, ngoài đường**. Mọi quyết định UI phải ưu tiên điều này.
 
@@ -146,6 +146,7 @@ và nút **"Mở trên Google Maps"**.
 | Địa chỉ | ✅ | **Bắt buộc có toạ độ** mới lưu được (xem mục 8) |
 | Liên hệ | ❌ | Nhiều dòng. Mỗi dòng: tên người/phòng ban + số điện thoại |
 | Ghi chú | ❌ | Việc cần làm khi tới nơi |
+| Mã vào cổng | ❌ | **Một ảnh** (QR, thẻ, bảng hướng dẫn). Chụp hoặc chọn từ thư viện, đổi, xoá được |
 | Cho người khác tìm thấy | ❌ | Cờ `is_public`, mặc định tắt (xem mục 7) |
 
 - **Một dòng liên hệ chỉ cần có tên HOẶC có số** — cả hai đều không bắt buộc. Dòng trống
@@ -153,7 +154,20 @@ và nút **"Mở trên Google Maps"**.
 - Số điện thoại có nhập thì phải đúng định dạng VN: 10–11 số bắt đầu bằng `0`, hoặc `+84`.
   Chấp nhận dấu cách, gạch, ngoặc — sẽ được chuẩn hoá trước khi lưu.
 - Lưu xong: có `returnTo` thì quay về đó kèm `?added=<id>`, không thì về `/companies`.
-- Xoá công ty: có hộp xác nhận.
+- Xoá công ty: có hộp xác nhận. Xoá luôn file ảnh mã vào cổng.
+- **Ảnh mã vào cổng chỉ được tải lên lúc bấm Lưu**, không phải lúc chọn ảnh — chọn
+  rồi bỏ ngang thì không có file rác. Lưu hỏng thì trình duyệt xoá file vừa tải.
+
+**Gộp công ty trùng** (thêm 20/11/2026): ở `/companies` bấm "Gộp công ty trùng", tick
+từ 2 công ty trở lên, rồi chọn công ty **giữ lại**. Các công ty còn lại bị xoá; số
+liên hệ (bỏ số trùng), ghi chú (nối vào cuối), ảnh mã vào cổng (công ty giữ lại
+không có ảnh thì lấy ảnh của công ty được tick đầu tiên) và **toàn bộ chuyến cũ**
+chuyển sang công ty giữ lại. Chuyến cũ **đổi luôn tên/địa chỉ/toạ độ** sang công ty
+giữ lại — chủ dự án chọn vậy, vì gộp nghĩa là chúng vốn là một công ty. Chi tiết ở
+mục 7.
+
+Ở trang xem chuyến, **bấm tên công ty** mở hộp thông tin: địa chỉ, ảnh mã vào cổng,
+số liên hệ, ghi chú — đọc sống từ `companies`, không phải snapshot.
 
 ### 5.4 Cài đặt — ĐÃ LÀM
 
@@ -184,100 +198,41 @@ type Stop = { id: string; label: string; location: LatLng };
 // end là tuỳ chọn. Tuyến mới không có; chuyến lưu trước 16/11/2026 thì có.
 type OptimizeInput = { start: LatLng; stops: Stop[]; end?: LatLng | null };
 
-type CorridorSummary = {
-  lengthKm: number;
-  bearingDeg: number;
-  uTurns: number;      // số lần phải quay đầu
-  sidesKnown: boolean; // false = không phân biệt được hai bên đường
-};
-
 type OptimizeResult = {
   orderedStops: Stop[];
   // start→stop1, … Có end thì dài orderedStops.length + 1, không có thì = length.
   legsKm: number[];
-  totalKm: number;     // haversine thuần, KHÔNG cộng tiền phạt quay đầu
-  method: "exact" | "heuristic";
-  corridor: CorridorSummary | null;
+  totalKm: number;     // haversine, đường chim bay
+  method: "heuristic"; // luôn vậy; chuyến lưu trước 20/11/2026 có thể ghi "exact"
 };
 
 export function optimizeRoute(input: OptimizeInput): OptimizeResult;
 ```
 
-### 6.2 Thuật toán
+### 6.2 Thuật toán — gần nhất trước (đổi 20/11/2026)
 
-- Khoảng cách **Haversine** (km, bán kính 6371). Ma trận tính sẵn một lần.
-- Điểm đầu cố định, điểm cuối tuỳ chọn — đây là bài toán **đường đi mở**, không phải chu trình.
-- **≤ 8 điểm đến** (`EXACT_MAX_STOPS`): duyệt mọi hoán vị, có **cắt nhánh** — bỏ ngay
-  nhánh nào đã đắt hơn lời giải tốt nhất hiện có. `method: "exact"`.
-- **> 8 điểm**: Nearest Neighbor để có lời giải ban đầu, rồi **2-opt** tới khi không giảm
-  được nữa. `method: "heuristic"`.
-- Luôn ghi rõ trong code và trên giao diện: đây là **khoảng cách đường chim bay**, chỉ dùng
-  để sắp thứ tự. Đường đi thật do Google Maps tính.
+**Nearest Neighbor thuần**, theo đúng yêu cầu của chủ dự án:
 
-### Luật "bên phải đi trước" (thêm 16/11/2026)
+1. Từ điểm xuất phát, đi tới điểm giao **gần điểm xuất phát nhất**.
+2. Từ đó, đi tới điểm **gần điểm vừa giao nhất** trong số còn lại. Lặp tới hết.
 
-Hàm mục tiêu **không còn là quãng đường thuần**:
+Ví dụ: kho → A (5km) → C (8km tính từ A) → B (2km tính từ C).
 
-```
-điểm = tổng km  +  số lần quay đầu × U_TURN_PENALTY_KM  +  số điểm đi bên trái lượt đi × WRONG_SIDE_PENALTY_KM
-```
+- Khoảng cách **Haversine** (km, bán kính 6371), ma trận tính sẵn một lần.
+- Hai điểm cách đều nhau thì **điểm đứng trước trong danh sách** được chọn — kết quả
+  luôn lặp lại được.
+- Có điểm kết thúc (chỉ chuyến cũ) thì nó **chỉ thêm một chặng cuối**, không kéo thứ
+  tự về phía nó.
+- **Không** duyệt hoán vị, **không** 2-opt, **không** luật bên phải. Cả ba đã có và đã
+  bị gỡ: chúng cho ra thứ tự ngắn hơn trên giấy (chạy thẳng tới điểm xa nhất rồi
+  giao ngược về, bên trái đường) nhưng không phải cách người chạy thật đi. Mỗi bước
+  chỉ nhìn một chặng tới chính là thứ làm kết quả **đoán trước được từ yên xe**.
+  Đừng "cải tiến" thêm bước tối ưu khi chưa hỏi.
+- Không giới hạn số điểm — 25 điểm vẫn chạy tức thì.
+- Luôn ghi rõ trong code và trên giao diện: đây là **khoảng cách đường chim bay**, chỉ
+  dùng để sắp thứ tự. Đường đi thật do Google Maps tính.
 
-Lý do: trên đường lớn có dải phân cách, **thứ tự ngắn nhất theo đường chim bay lại là
-thứ tự tệ nhất để chạy** — nó cho tài xế nhảy qua nhảy lại hai bên đường, mỗi lần là
-một lần chạy tới chỗ hở dải phân cách rồi vòng lại. Thà chạy thêm vài km còn hơn.
-
-Việc này chia làm **hai câu hỏi tách rời**, vì chúng khác nhau cả về độ khó lẫn độ
-tin cậy. Cả hai nằm ở `src/lib/route-optimizer/corridor.ts`, và app **không có dữ
-liệu đường** (mục 2) nên tất cả suy từ hình dạng chùm điểm.
-
-**Câu hỏi 1 — các điểm có nằm dọc một hành lang không?** Cỡ kilômét, dễ trả lời.
-Khớp trục chính bằng PCA rồi đòi đủ bốn điều: dài ≥ 1.5km, lệch khỏi trục ≤ 150m
-(RMS), dài ≥ 8× bề ngang, và **không điểm nào nằm sau lưng điểm xuất phát** (xuất
-phát ở giữa hành lang thì "đi ra" không còn nghĩa gì nữa).
-
-**Câu hỏi 2 — mỗi điểm nằm bên nào?** Cỡ vài chục mét, khó hơn hẳn, và là chỗ bản
-đầu tiên của tao làm sai. Hai cái bẫy:
-
-1. **Trục PCA bị chính hai bên đường kéo nghiêng.** Các điểm so le hai bên làm trục
-   lệch đi đúng cỡ khoảng cách giữa hai bên, nên đo độ lệch so với một đường thẳng
-   không nghiêng thì hai bên nhoè vào nhau.
-2. **Toạ độ gõ tay dọc một con đường vốn đã lệch 20–30m.** Chỉ đếm xem điểm nào lệch
-   dương, điểm nào lệch âm thì một con đường **không có** dải phân cách cũng ra "hai
-   bên".
-
-Nên thay vì chia theo dấu, code **khớp hẳn một mô hình**:
-
-```
-độ lệch = tung độ gốc + độ dốc × quãng đường dọc trục + nửa bề rộng × bên
-```
-
-Đường tim được phép có độ dốc riêng — đó chính là chỗ hấp thụ cái nghiêng ở bẫy 1.
-Giải bằng cách luân phiên: khớp hệ số, gán lại mỗi điểm về lề gần hơn, lặp lại (2–3
-vòng là đứng yên).
-
-Rồi mới tin kết quả, với ba cửa ải:
-
-| Điều kiện | Chặn cái gì |
-|---|---|
-| Hai lề cách nhau ≥ 20m | Dải phân cách tưởng tượng |
-| Nửa bề rộng ≥ 2× phần dư chưa giải thích được | Nhiễu toạ độ đội lốt hai lề (bẫy 2) |
-| Mỗi bên ≥ 2 điểm, và tổng ≥ 5 điểm | Một điểm lạc tự nhận là một lề; và việc khớp 3 hệ số vào 4 điểm thì *luôn* vừa khít |
-
-Không qua được thì `sidesKnown = false`: vẫn tính là hành lang, nhưng **không áp luật
-bên phải**, chỉ chạy một mạch. Mọi điểm cùng một bên cũng rơi vào đây — và đúng, vì
-khi đó **không có dải phân cách nào để băng qua**, không mất gì cả.
-
-`WRONG_SIDE_PENALTY_KM` cố ý để nhỏ (0.2): nó chỉ được phép phân định hai phương án
-xấp xỉ nhau, không được phép thắng một đoạn đường vòng thật.
-
-**Hai hằng số để chỉnh** nằm ở đầu `optimize.ts`. Đặt `U_TURN_PENALTY_KM = 0` là
-quay về đúng hành vi cũ.
-
-**`totalKm` vẫn là km thật**, tiền phạt chỉ dùng để xếp thứ tự chứ không bao giờ được
-cộng vào con số hiện ra cho người dùng.
-
-Vì hàm mục tiêu không còn tách được theo từng cạnh, `twoOpt` phải **chấm điểm cả
-tuyến** mỗi lần thử đảo đoạn, không dùng mẹo so hai cạnh biên được nữa.
+Test có ví dụ của chủ dự án và 6 điểm thật ở Bình Dương (`optimize.test.ts`).
 
 ### 6.3 Tạo link Google Maps
 
@@ -331,6 +286,10 @@ Khác với bản đặc tả ban đầu:
 - `companies` có thêm cột **`is_public boolean not null default false`**.
   Đặt tên `is_public` chứ không phải `public` vì `public` cũng là tên schema trong Postgres.
 - `company_contacts.phone` **cho phép NULL** (mục 5.3).
+- `companies.gate_photo_path text` (thêm 20/11/2026): đường dẫn ảnh mã vào cổng trong
+  bucket, **không phải URL**. Một cột chứ không phải bảng: chủ dự án chốt mỗi công ty
+  một ảnh, và không muốn thêm bảng. Check `companies_gate_photo_in_own_folder` bắt
+  segment đầu phải là `user_id`.
 
 ### `is_public` công khai những gì
 
@@ -339,6 +298,10 @@ Khác với bản đặc tả ban đầu:
 
 Rủi ro đã được nêu trước khi làm và chủ dự án vẫn chọn phương án này. Đây là **hành vi cố
 ý, không phải lỗi**. Muốn siết lại thì sửa đúng hai policy, xem `docs/database.md`.
+
+**Ngoại lệ: ảnh mã vào cổng không đi theo `is_public`.** Người khác đọc được cột
+`gate_photo_path` nhưng không mở được file — policy của bucket chỉ cho chủ thư mục.
+Khi làm màn hình tìm công ty công khai thì phải quyết lại chỗ này.
 
 ### RLS
 
@@ -357,6 +320,21 @@ trong **một transaction**. Hàm **không** dùng `security definer`, nên RLS 
 
 Hàm này hiện được định nghĩa ở migration `004`. Nếu cần sửa, viết migration mới và **xoá
 định nghĩa ở các migration cũ** — xem quy tắc 3.8.
+
+### Gộp công ty — RPC `merge_companies`
+
+Migration `20261120000001`. Một transaction: chuyển liên hệ, ghi chú, ảnh, **sửa
+`trip_stops`** (trỏ về công ty giữ lại và ghi đè snapshot tên/địa chỉ/toạ độ), rồi xoá
+các công ty bị gộp. Không `security definer`; kiểm tra chủ sở hữu **tường minh** vì RLS
+cho đọc cả công ty `is_public` của người khác.
+
+Đây là **chỗ duy nhất được phép ghi đè snapshot** của `trip_stops`. Chuyến của
+*người khác* từng ghé công ty bị gộp (công ty đó `is_public`) không bị sửa — RLS chặn
+— và chỉ mất `company_id` như khi xoá thường.
+
+Hàm trả về các đường dẫn ảnh không còn ai trỏ tới; server action xoá file **sau khi**
+transaction xong. Ngược với quy tắc "xoá file trước" ở dưới, có chủ ý: gộp hỏng giữa
+chừng thì không được mất ảnh mà công ty vẫn đang hiện.
 
 ### Chuyến (`trips`, `trip_stops`, `trip_stop_photos`)
 
@@ -401,7 +379,8 @@ Ai sửa hàm này nhớ: bỏ phần giữ nguyên dữ liệu giao hàng = xo�
 Bucket `delivery-photos`, **private**. Ảnh phiếu có tên khách và chữ ký; bucket public
 nghĩa là ai đoán được URL đều xem được. Đọc bằng signed URL hạn 1 giờ.
 
-Đường dẫn `<user_id>/<trip_id>/<stop_id>/<uuid>.jpg` — **segment đầu bắt buộc là
+Đường dẫn `<user_id>/<trip_id>/<stop_id>/<uuid>.jpg`, và ảnh mã vào cổng ở
+`<user_id>/companies/<uuid>.jpg` (cùng bucket) — **segment đầu bắt buộc là
 `user_id`**, vì mọi policy phân quyền bằng `(storage.foldername(name))[1] = auth.uid()`.
 Đổi cấu trúc này thì upload hỏng với lỗi quyền không chỉ về đâu.
 
@@ -413,6 +392,9 @@ Hai quy tắc bắt buộc:
 - **Ghi hàng thất bại thì phải xoá file vừa tải lên.** Không thì file nằm lại vĩnh viễn
   trong hạn mức 1GB mà không gì trỏ tới.
 - **Xoá chuyến/ảnh thì xoá file trước, xoá hàng sau.** Cascade chỉ xoá hàng trong DB.
+  Hai ngoại lệ có lý do: **đổi** ảnh mã vào cổng (ghi hàng trước, xoá file cũ sau) và
+  **gộp công ty** (như trên) — ở cả hai, làm ngược lại thì một lần ghi hỏng sẽ để
+  công ty trỏ vào một file đã mất.
 
 Nếu sau này có route của Next phục vụ ảnh, **đường dẫn không được kết thúc bằng đuôi
 ảnh** — matcher trong `middleware.ts` loại trừ chúng, route sẽ lọt qua tầng xác thực.
@@ -469,7 +451,8 @@ Nếu sau này cần tìm theo tên trong app, dùng **Google Places API** (tố
 | **5. Google Maps** | `buildGoogleMapsLinks` + test, chia chặng | ✅ xong |
 | **6. Hoàn thiện** | Trạng thái loading/lỗi/rỗng, kiểm tra trên điện thoại thật | ✅ xong |
 | **7. Chuyến** | Lưu chuyến, lịch tra cứu, ảnh chứng từ, lấy mẫu, đã giao | ✅ xong |
-| **8. Cài đặt + luật bên phải** | Bỏ điểm kết thúc, điểm bắt đầu mặc định, tối ưu theo hành lang | ⏳ đang làm |
+| **8. Cài đặt + luật bên phải** | Bỏ điểm kết thúc, điểm bắt đầu mặc định, tối ưu theo hành lang | ✅ xong; luật bên phải gỡ ở GĐ 9 |
+| **9. Mã cổng + gộp + core mới** | Ảnh mã vào cổng, gộp công ty trùng, hộp thông tin công ty, core gần nhất trước | ⏳ đang làm |
 
 Đã deploy: GitHub `tuquach090/beeRoute` → Vercel tự build khi push `main`.
 
@@ -495,17 +478,19 @@ src/
   components/
     ui/                             shadcn, không sửa tay
     route-form.tsx  company-form.tsx  company-picker-sheet.tsx
+    company-list.tsx                danh sách + chế độ gộp
+    gate-photo-field.tsx            ảnh mã vào cổng trong form công ty
     settings-form.tsx
     address-input.tsx  account-menu.tsx  bottom-tabs.tsx
     logo.tsx  theme-script.tsx  theme-toggle.tsx  google-*.tsx
   lib/
     supabase/                       client / server / middleware / env
-    companies/                      queries.ts (đọc) + actions.ts (ghi)
+    companies/                      queries.ts (đọc) + actions.ts (ghi, gộp) + storage.ts (đường dẫn ảnh mã cổng)
     trips/                          queries/actions + storage.ts (đường dẫn ảnh)
     settings/                       queries/actions + types.ts (điểm bắt đầu mặc định)
     dates/vn-date.ts                múi giờ VN + lưới lịch, có test
     images/compress.ts              nén ảnh bằng canvas, có test
-    route-optimizer/                thuần TS + test (optimize + corridor)
+    route-optimizer/                thuần TS + test (gần nhất trước)
     google-maps/                    build-links + test
     geocoding/                      parse-location + test (regex, không gọi mạng)
     validation/                     zod schema + resolver tự viết + test
@@ -540,13 +525,12 @@ Cấu hình Google OAuth và các bước deploy: xem **[README.md](README.md)**
 - Giao diện tìm và thêm công ty `is_public` của người khác (cờ đã có trong DB và RLS, chưa có màn hình).
 - Nhiều người dùng chung một công ty (multi-tenant), phân quyền điều phối/tài xế.
 - Thống kê/biểu đồ theo tuần tháng, tính lương theo chuyến (lịch sử chuyến đã có).
-- Khoảng cách theo đường thật (OSRM/Google Directions), giờ mở cửa, khung giờ giao.
-  Có dữ liệu đường thì luật "bên phải đi trước" (mục 6.2) hết phải đoán: biết được
-  chỗ nào thật sự có dải phân cách và điểm nằm bên nào, thay vì suy từ toạ độ.
+- Khoảng cách theo đường thật, giờ mở cửa, khung giờ giao. Đã thử OSRM và Valhalla
+  (16/11/2026) với 6 điểm thật: cả hai đều không xếp ra thứ tự chủ dự án chạy, kể cả
+  khi ép ghé đúng lề phải, vì không tính thời gian chờ đèn để băng qua đường lớn.
+- Giao đúng bên phải trên đường lớn (TL743B). Cách duy nhất đã test ra đúng là đánh
+  dấu tay "xe chạy trước cổng đi hướng nào" cho từng công ty; chủ dự án để sau.
 - Nhiều điểm bắt đầu mặc định (kho sáng khác kho chiều) — hiện chỉ có một.
-- Chỉnh `U_TURN_PENALTY_KM` ngay trong Cài đặt. Giờ phải sửa code rồi deploy lại.
-- Nhận ra **nhiều** hành lang trong một chuyến. Hiện chỉ xét cả chùm điểm là một
-  hành lang hoặc không là gì; nửa chuyến chạy quốc lộ nửa chuyến chui hẻm thì bị bỏ qua.
 - Seed dữ liệu mẫu (cần `user_id` thật nên phải có người đăng nhập trước).
 - PWA cài lên màn hình chính, dùng offline.
 - Bộ đếm ký tự cho ô "Tên hiển thị".

@@ -1,6 +1,6 @@
 # BeeRoute
 
-Sắp xếp thứ tự các điểm giao sao cho tổng quãng đường ngắn nhất, rồi mở tuyến đã
+Sắp xếp thứ tự các điểm giao theo kiểu gần trước, xa sau, rồi mở tuyến đã
 tối ưu trên Google Maps.
 
 Next.js (App Router) · TypeScript · Tailwind CSS v4 · shadcn/ui · Supabase

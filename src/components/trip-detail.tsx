@@ -8,6 +8,8 @@ import {
   Check,
   ChevronLeft,
   ExternalLink,
+  Info,
+  KeyRound,
   MapPin,
   Navigation,
   Pencil,
@@ -42,7 +44,11 @@ import {
 import { parseIsoDate } from "@/lib/dates/vn-date";
 import { cn } from "@/lib/utils";
 import { vi } from "@/lib/i18n/vi";
-import type { TripDetail, TripStopView } from "@/lib/trips/queries";
+import type {
+  TripDetail,
+  TripStopCompany,
+  TripStopView,
+} from "@/lib/trips/queries";
 
 export function TripDetailView({
   trip,
@@ -323,7 +329,23 @@ function StopRow({
       <div className="bg-card min-w-0 flex-1 space-y-3 rounded-xl border p-3">
         <div>
           <div className="flex items-baseline justify-between gap-2">
-            <span className="font-medium">{stop.display_name}</span>
+            {stop.company && stop.company_id ? (
+              <CompanyInfoDialog
+                companyId={stop.company_id}
+                company={stop.company}
+                contacts={stop.contacts}
+              >
+                <button
+                  type="button"
+                  className="text-primary inline-flex min-h-8 items-center gap-1.5 text-left font-medium underline-offset-4 hover:underline"
+                >
+                  {stop.display_name}
+                  <Info className="size-3.5 shrink-0" aria-hidden />
+                </button>
+              </CompanyInfoDialog>
+            ) : (
+              <span className="font-medium">{stop.display_name}</span>
+            )}
             {stop.leg_km !== null && (
               <span className="tnum text-muted-foreground shrink-0 text-sm">
                 +{stop.leg_km.toFixed(1)} {vi.common.km}
@@ -342,33 +364,7 @@ function StopRow({
           </p>
         )}
 
-        {stop.contacts.length > 0 && (
-          <ul className="space-y-1">
-            {stop.contacts.map((c) => (
-              <li key={c.id}>
-                {c.phone ? (
-                  <a
-                    href={`tel:${c.phone}`}
-                    className="text-primary inline-flex items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline"
-                  >
-                    <Phone className="size-3.5" aria-hidden />
-                    <span className="tnum">{c.phone}</span>
-                    {c.contact_name && (
-                      <span className="text-muted-foreground font-normal">
-                        · {c.contact_name}
-                      </span>
-                    )}
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
-                    <Phone className="size-3.5" aria-hidden />
-                    {c.contact_name}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+        {stop.contacts.length > 0 && <ContactList contacts={stop.contacts} />}
 
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm" className="gap-1.5">
@@ -436,5 +432,127 @@ function StopRow({
         />
       </div>
     </li>
+  );
+}
+
+function ContactList({ contacts }: { contacts: TripStopView["contacts"] }) {
+  return (
+    <ul className="space-y-1">
+      {contacts.map((c) => (
+        <li key={c.id}>
+          {c.phone ? (
+            <a
+              href={`tel:${c.phone}`}
+              className="text-primary inline-flex items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline"
+            >
+              <Phone className="size-3.5" aria-hidden />
+              <span className="tnum">{c.phone}</span>
+              {c.contact_name && (
+                <span className="text-muted-foreground font-normal">
+                  · {c.contact_name}
+                </span>
+              )}
+            </a>
+          ) : (
+            <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
+              <Phone className="size-3.5" aria-hidden />
+              {c.contact_name}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Everything the rider needs at the gate, behind the stop's name: today's
+ * company record, not the snapshot the trip was saved with.
+ */
+function CompanyInfoDialog({
+  companyId,
+  company,
+  contacts,
+  children,
+}: {
+  companyId: string;
+  company: TripStopCompany;
+  contacts: TripStopView["contacts"];
+  children: React.ReactNode;
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>{children}</DialogTrigger>
+      <DialogContent className="max-h-[90dvh] max-w-sm overflow-y-auto rounded-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-left">
+            {company.display_name}
+          </DialogTitle>
+          <DialogDescription className="text-left wrap-anywhere">
+            {company.address}
+          </DialogDescription>
+        </DialogHeader>
+
+        <section className="space-y-2">
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+            <KeyRound className="size-4" aria-hidden />
+            {vi.companyForm.gatePhoto}
+          </h3>
+          {company.gate_photo_url ? (
+            <a
+              href={company.gate_photo_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block"
+            >
+              {/* Signed URL: expires within the hour, so no next/image. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={company.gate_photo_url}
+                alt={vi.companyForm.gatePhoto}
+                className="bg-muted max-h-80 w-full rounded-xl border object-contain"
+              />
+              <span className="text-muted-foreground mt-1 block text-xs">
+                {vi.tripDetail.gatePhotoOpen}
+              </span>
+            </a>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              {vi.companyForm.gatePhotoEmpty}
+            </p>
+          )}
+        </section>
+
+        {contacts.length > 0 && (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold">{vi.route.contacts}</h3>
+            <ContactList contacts={contacts} />
+          </section>
+        )}
+
+        {company.note && (
+          <section className="space-y-1">
+            <h3 className="text-sm font-semibold">{vi.route.note}</h3>
+            <p className="text-sm leading-6 whitespace-pre-line wrap-anywhere">
+              {company.note}
+            </p>
+          </section>
+        )}
+
+        <DialogFooter className="flex-col gap-2 sm:flex-col">
+          <Button asChild variant="outline" className="h-12 w-full gap-2">
+            <Link href={`/companies/${companyId}/edit`}>
+              <Pencil className="size-4" aria-hidden />
+              {vi.tripDetail.editCompany}
+            </Link>
+          </Button>
+          <DialogClose asChild>
+            <Button variant="ghost" className="h-11 w-full">
+              {vi.common.close}
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { RowChevron } from "@/components/row-chevron";
-import { Globe, Phone, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import { CompanyList } from "@/components/company-list";
 import { Button } from "@/components/ui/button";
 import { listOwnCompanies } from "@/lib/companies/queries";
 import { vi } from "@/lib/i18n/vi";
@@ -39,38 +39,7 @@ export default async function CompaniesPage() {
           </Button>
         </div>
       ) : (
-        <ul className="space-y-2">
-          {companies.map((c) => (
-            <li key={c.id}>
-              <Link
-                href={`/companies/${c.id}/edit`}
-                className="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors hover:bg-muted"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{c.display_name}</span>
-                    {c.is_public && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-accent-foreground">
-                        <Globe className="size-3" aria-hidden />
-                        {vi.companies.publicBadge}
-                      </span>
-                    )}
-                  </span>
-                  <span className="mt-0.5 block text-sm leading-5 text-muted-foreground wrap-anywhere">
-                    {c.address}
-                  </span>
-                  <span className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Phone className="size-3" aria-hidden />
-                    {c.company_contacts.length > 0
-                      ? vi.companies.contactCount(c.company_contacts.length)
-                      : vi.companies.noContact}
-                  </span>
-                </span>
-                <RowChevron />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <CompanyList companies={companies} />
       )}
     </div>
   );

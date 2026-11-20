@@ -191,3 +191,25 @@ describe("payload sent to save_company", () => {
     ]);
   });
 });
+
+describe("companySchema — gate photo", () => {
+  it("treats a missing or blank path as no photo", () => {
+    expect(companySchema.parse({ ...base, contacts: [] }).gatePhotoPath).toBe(
+      null,
+    );
+    expect(
+      companySchema.parse({ ...base, contacts: [], gatePhotoPath: "  " })
+        .gatePhotoPath,
+    ).toBe(null);
+  });
+
+  it("keeps a path and re-parses its own output", () => {
+    const first = companySchema.parse({
+      ...base,
+      contacts: [],
+      gatePhotoPath: "u/companies/a.jpg",
+    });
+    expect(first.gatePhotoPath).toBe("u/companies/a.jpg");
+    expect(companySchema.parse(first)).toEqual(first);
+  });
+});

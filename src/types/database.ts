@@ -72,6 +72,7 @@ export type Database = {
           lng: number;
           note: string | null;
           is_public: boolean;
+          gate_photo_path: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -84,6 +85,7 @@ export type Database = {
           lng: number;
           note?: string | null;
           is_public?: boolean;
+          gate_photo_path?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -96,6 +98,7 @@ export type Database = {
           lng?: number;
           note?: string | null;
           is_public?: boolean;
+          gate_photo_path?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -299,6 +302,11 @@ export type Database = {
     };
     Views: Record<never, never>;
     Functions: {
+      merge_companies: {
+        Args: { p_target_id: string; p_source_ids: string[] };
+        /** Gate-photo paths no row points at any more; delete those files. */
+        Returns: string[];
+      };
       save_trip: {
         Args: {
           p_trip_id: string | null;

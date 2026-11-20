@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { optimizeRoute } from "./optimize";
 import { haversineKm } from "./haversine";
-import { EXACT_MAX_STOPS, type Stop } from "./types";
+import type { Stop } from "./types";
 
 const stop = (id: string, lat: number, lng: number): Stop => ({
   id,
@@ -62,7 +62,7 @@ describe("optimizeRoute — edge cases", () => {
     });
     expect(result.orderedStops.map((s) => s.id)).toEqual(["a"]);
     expect(result.legsKm).toHaveLength(2);
-    expect(result.method).toBe("exact");
+    expect(result.method).toBe("heuristic");
   });
 
   it("rejects duplicate ids", () => {
@@ -115,83 +115,111 @@ describe("optimizeRoute — edge cases", () => {
   });
 });
 
-describe("optimizeRoute — ordering quality", () => {
-  const start = { lat: 10.77, lng: 106.7 };
-  const end = { lat: 10.77, lng: 106.9 };
+/** A point `km` kilometres east of `origin`, on the same latitude. */
+const east = (origin: { lat: number; lng: number }, km: number) => ({
+  lat: origin.lat,
+  lng: origin.lng + km / (111.32 * Math.cos((origin.lat * Math.PI) / 180)),
+});
 
-  it("walks points laid out in a line from nearest to furthest", () => {
-    // Deliberately shuffled input along a straight west-to-east line.
-    const stops = [
-      stop("d", 10.77, 106.86),
-      stop("a", 10.77, 106.74),
-      stop("c", 10.77, 106.82),
-      stop("b", 10.77, 106.78),
-    ];
-    const result = optimizeRoute({ start, stops, end });
-    expect(result.orderedStops.map((s) => s.id)).toEqual(["a", "b", "c", "d"]);
-    expect(result.method).toBe("exact");
+describe("optimizeRoute — nearest first, then nearest to the previous stop", () => {
+  const kho = { lat: 10.77, lng: 106.7 };
+  const at = (id: string, km: number) => {
+    const p = east(kho, km);
+    return stop(id, p.lat, p.lng);
+  };
+
+  it("follows the rider's own example: kho → A (5km) → C (8km) → B (2km)", () => {
+    // From A, C is 8 km away and B is 10, so C comes next; B is then 2 km on.
+    const stops = [at("B", 15), at("C", 13), at("A", 5)];
+    const result = optimizeRoute({ start: kho, stops });
+
+    expect(result.orderedStops.map((s) => s.id)).toEqual(["A", "C", "B"]);
+    expect(result.legsKm[0]).toBeCloseTo(5, 1);
+    expect(result.legsKm[1]).toBeCloseTo(8, 1);
+    expect(result.legsKm[2]).toBeCloseTo(2, 1);
   });
 
-  it("switches to the heuristic above the exact threshold", () => {
-    const stops = Array.from({ length: EXACT_MAX_STOPS + 1 }, (_, i) =>
-      stop(`s${i}`, 10.7 + i * 0.01, 106.7 + i * 0.01),
+  it("picks the stop nearest the start first, whatever the input order", () => {
+    const stops = [at("far", 12), at("near", 1), at("mid", 6)];
+    expect(optimizeRoute({ start: kho, stops }).orderedStops[0].id).toBe(
+      "near",
     );
-    expect(optimizeRoute({ start, stops, end }).method).toBe("heuristic");
-
-    const exact = Array.from({ length: EXACT_MAX_STOPS }, (_, i) =>
-      stop(`s${i}`, 10.7 + i * 0.01, 106.7 + i * 0.01),
-    );
-    expect(optimizeRoute({ start, stops: exact, end }).method).toBe("exact");
   });
 
-  it("never beats the exact solver on inputs small enough for both", () => {
-    // Pseudo-random but fixed, so a failure is reproducible.
-    let seed = 42;
-    const rand = () => {
-      seed = (seed * 1103515245 + 12345) % 2147483648;
-      return seed / 2147483648;
-    };
+  it("measures each step from the previous stop, not from the start", () => {
+    // A is nearest the start. From A, B (3 km back west) beats C (9 km east),
+    // even though C is closer to the start than B is.
+    const stops = [at("C", 10), at("B", -2), at("A", 1)];
+    expect(
+      optimizeRoute({ start: kho, stops }).orderedStops.map((s) => s.id),
+    ).toEqual(["A", "B", "C"]);
+  });
 
-    for (let trial = 0; trial < 20; trial++) {
-      const stops = Array.from({ length: 7 }, (_, i) =>
-        stop("s" + i, 10.7 + rand() * 0.3, 106.6 + rand() * 0.3),
-      );
-      const exact = optimizeRoute({ start, stops, end });
-      // The heuristic path is not reachable at this size, so compare the exact
-      // result against every permutation's cost via a brute-force check.
-      expect(exact.totalKm).toBeLessThanOrEqual(
-        totalFor(stops, start, end) + 1e-9,
-      );
-    }
+  it("does not trade the greedy order for a shorter one", () => {
+    // Same layout: B first would total 2 + 3 + 9 = 14 km, the greedy order
+    // totals 1 + 3 + 12 = 16. The rule is nearest-next, not shortest-total.
+    const stops = [at("C", 10), at("B", -2), at("A", 1)];
+    const result = optimizeRoute({ start: kho, stops });
+    expect(result.totalKm).toBeCloseTo(16, 1);
+  });
+
+  it("breaks a tie in favour of the stop listed first", () => {
+    const stops = [at("west", -3), at("east", 3)];
+    expect(optimizeRoute({ start: kho, stops }).orderedStops[0].id).toBe(
+      "west",
+    );
+    const flipped = [at("east", 3), at("west", -3)];
+    expect(
+      optimizeRoute({ start: kho, stops: flipped }).orderedStops[0].id,
+    ).toBe("east");
+  });
+
+  it("does not let the end point pull the order towards itself", () => {
+    const stops = [at("C", 10), at("B", -2), at("A", 1)];
+    const open = optimizeRoute({ start: kho, stops });
+    const toEnd = optimizeRoute({ start: kho, stops, end: east(kho, -5) });
+    expect(toEnd.orderedStops.map((s) => s.id)).toEqual(
+      open.orderedStops.map((s) => s.id),
+    );
+  });
+
+  it("handles more stops than the old exact solver allowed", () => {
+    const stops = Array.from({ length: 25 }, (_, i) =>
+      at(`s${i}`, ((i * 7) % 25) + 1),
+    );
+    const result = optimizeRoute({ start: kho, stops });
+    expect(result.orderedStops.map((s) => s.id)).toEqual(
+      [...stops]
+        .sort((a, b) => a.location.lng - b.location.lng)
+        .map((s) => s.id),
+    );
   });
 });
 
-describe("optimizeRoute — real TP.HCM coordinates", () => {
-  it("orders a realistic delivery run sensibly", () => {
-    const start = { lat: 10.7721, lng: 106.698 }; // Bến Thành
-    const end = { lat: 10.7626, lng: 106.6601 }; // Quận 5
+describe("optimizeRoute — the rider's real Bình Dương run", () => {
+  // Coordinates the rider supplied on 16/11/2026: warehouse in Thủ Đức, six
+  // factories strung north along TL743B.
+  const kho = { lat: 10.820982, lng: 106.794399 };
+  const stops = [
+    stop("Đại Hoa", 11.071434, 106.7736494),
+    stop("Kisoo", 10.9549211, 106.743391),
+    stop("Delta", 10.8701362, 106.747389),
+    stop("Chí Hùng", 10.9740923, 106.752528),
+    stop("Craft", 10.9257095, 106.7414861),
+    stop("Pungkook3", 10.9542643, 106.7454434),
+  ];
 
-    const stops = [
-      stop("thuduc", 10.8505, 106.7612),
-      stop("q3", 10.7872, 106.6999),
-      stop("tanbinh", 10.7909, 106.6533),
-      stop("binhthanh", 10.8012, 106.7118),
-    ];
-
-    const result = optimizeRoute({ start, stops, end });
-
-    expect(result.method).toBe("exact");
-    expect(result.orderedStops).toHaveLength(4);
-    expect(result.legsKm).toHaveLength(5);
-
-    // Whatever the order, it must beat the shuffled input order.
-    expect(result.totalKm).toBeLessThanOrEqual(
-      totalFor(stops, start, end) + 1e-9,
-    );
-
-    // Thủ Đức is far north-east; going there first then coming back would be
-    // wasteful, so it must not be the opening stop.
-    expect(result.orderedStops[0].id).not.toBe("thuduc");
+  it("works outwards from the warehouse, nearest hop each time", () => {
+    const result = optimizeRoute({ start: kho, stops });
+    expect(result.orderedStops.map((s) => s.id)).toEqual([
+      "Delta",
+      "Craft",
+      "Pungkook3",
+      "Kisoo",
+      "Chí Hùng",
+      "Đại Hoa",
+    ]);
+    expect(result.totalKm).toBeCloseTo(30.6, 1);
   });
 });
 
@@ -230,113 +258,5 @@ describe("optimizeRoute — without an end point", () => {
     const open = optimizeRoute({ start, stops });
     const closed = optimizeRoute({ start, stops, end: start });
     expect(closed.totalKm).toBeCloseTo(open.totalKm * 2, 6);
-  });
-});
-
-/**
- * A synthetic divided road: stops sit about 55 m off the centreline, close
- * enough together along it that doubling back is cheaper than crossing the
- * median at every stop. Driving east, the south kerb is the right-hand one.
- */
-describe("optimizeRoute — the right-hand kerb rule", () => {
-  const start = { lat: 10.77, lng: 106.7 };
-  const south = (id: string, lng: number) => stop(id, 10.7695, lng);
-  const north = (id: string, lng: number) => stop(id, 10.7705, lng);
-
-  const stops = [
-    south("r1", 106.704),
-    north("l1", 106.708),
-    south("r2", 106.712),
-    north("l2", 106.716),
-    south("r3", 106.72),
-    north("l3", 106.724),
-  ];
-
-  it("serves the right kerb out to the far end, then the other side back", () => {
-    const result = optimizeRoute({ start, stops });
-
-    expect(result.orderedStops.map((s) => s.id)).toEqual([
-      "r1",
-      "r2",
-      "r3",
-      "l3",
-      "l2",
-      "l1",
-    ]);
-    expect(result.corridor?.uTurns).toBe(1);
-    expect(result.corridor?.sidesKnown).toBe(true);
-  });
-
-  it("beats the shortest-distance order on turnarounds, not on kilometres", () => {
-    const result = optimizeRoute({ start, stops });
-    const zigZag = ["r1", "l1", "r2", "l2", "r3", "l3"].map((id) =>
-      stops.find((s) => s.id === id)!,
-    );
-
-    // The zig-zag really is shorter as the crow flies. It is only worse once
-    // the three median crossings it needs are priced in — which is the whole
-    // reason this rule exists.
-    expect(result.totalKm).toBeGreaterThan(totalFor(zigZag, start, start) / 2);
-    expect(result.corridor?.uTurns).toBeLessThan(5);
-  });
-
-  it("reports totalKm as real kilometres, with no penalty folded in", () => {
-    const result = optimizeRoute({ start, stops });
-    const summed = result.legsKm.reduce((a, b) => a + b, 0);
-    expect(result.totalKm).toBeCloseTo(summed, 9);
-  });
-
-  it("keeps the sweep when there are too many stops for the exact solver", () => {
-    const many = Array.from({ length: 12 }, (_, i) =>
-      i % 2 === 0
-        ? south(`r${i}`, 106.704 + i * 0.002)
-        : north(`l${i}`, 106.704 + i * 0.002),
-    );
-    const result = optimizeRoute({ start, stops: many });
-
-    expect(result.method).toBe("heuristic");
-    expect(result.corridor).not.toBeNull();
-    // One turnaround at the far end is the whole point; a zig-zag would need
-    // one at nearly every stop.
-    expect(result.corridor!.uTurns).toBeLessThanOrEqual(2);
-  });
-
-  it("falls back to plain shortest order when the stops form no corridor", () => {
-    const scattered = [
-      stop("a", 10.78, 106.72),
-      stop("b", 10.75, 106.74),
-      stop("c", 10.8, 106.69),
-      stop("d", 10.76, 106.78),
-    ];
-    const result = optimizeRoute({ start, stops: scattered });
-
-    expect(result.corridor).toBeNull();
-    // Nothing is added to the cost, so this is still the shortest order.
-    expect(result.totalKm).toBeLessThanOrEqual(
-      totalFor(scattered, start, scattered[3].location) + 1e-9,
-    );
-  });
-
-  it("does not reorder a one-sided road, where no median is crossed", () => {
-    const sameKerb = [
-      south("a", 106.704),
-      south("b", 106.708),
-      south("c", 106.712),
-      south("d", 106.716),
-      south("e", 106.72),
-      south("f", 106.724),
-    ];
-    const result = optimizeRoute({ start, stops: sameKerb });
-
-    expect(result.corridor?.sidesKnown).toBe(false);
-    expect(result.orderedStops.map((s) => s.id)).toEqual([
-      "a",
-      "b",
-      "c",
-      "d",
-      "e",
-      "f",
-    ]);
-    expect(result.corridor?.uTurns).toBe(0);
   });
 });

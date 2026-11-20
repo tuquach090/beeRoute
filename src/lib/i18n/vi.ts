@@ -83,12 +83,6 @@ export const vi = {
     startLabel: "Bắt đầu",
     /** Only old trips still carry an end point; new routes stop at the last drop. */
     endLabel: "Kết thúc",
-    corridorNote: (uTurns: number) =>
-      uTurns === 0
-        ? "Các điểm nằm dọc một tuyến đường lớn và đi được một mạch, không phải quay đầu lần nào."
-        : `Các điểm nằm dọc một tuyến đường lớn nên đã sắp theo kiểu giao hết bên phải tới điểm xa nhất rồi vòng lại bên kia. Cần quay đầu ${uTurns} lần.`,
-    corridorNoteNoSides:
-      "Các điểm nằm dọc một tuyến đường lớn nhưng đều ở cùng một bên, nên cứ chạy thẳng một mạch.",
     totalDistance: "Tổng quãng đường",
     straightLineNote:
       "Khoảng cách đường chim bay, chỉ dùng để sắp thứ tự. Đường đi thật do Google Maps tính.",
@@ -141,6 +135,20 @@ export const vi = {
     noContact: "Chưa có số liên hệ",
   },
 
+  merge: {
+    start: "Gộp công ty trùng",
+    selectHint:
+      "Chọn từ 2 công ty trở lên cần gộp làm một, rồi bấm Tiếp tục để chọn công ty giữ lại.",
+    cancel: "Huỷ",
+    next: (n: number) => (n < 2 ? "Chọn ít nhất 2" : `Tiếp tục (${n})`),
+    pickTitle: "Giữ lại công ty nào?",
+    pickBody:
+      "Các công ty còn lại sẽ bị xoá. Số liên hệ, ghi chú, ảnh mã vào cổng và các chuyến cũ của chúng được chuyển sang công ty giữ lại; chuyến cũ sẽ hiện tên và địa chỉ của công ty này.",
+    keeps: "Giữ lại",
+    goes: "Gộp vào rồi xoá",
+    confirm: (n: number, name: string) => `Gộp ${n} công ty vào "${name}"`,
+    back: "Quay lại",
+  },
   companyForm: {
     createTitle: "Tạo công ty",
     editTitle: "Sửa công ty",
@@ -158,7 +166,7 @@ export const vi = {
       "Bật lên thì mọi người dùng BeeRoute khác đều xem được công ty này, kể cả số liên hệ và ghi chú. Tắt thì chỉ mình bạn thấy.",
     deleteConfirmTitle: "Xoá công ty này?",
     deleteConfirmBody: (name: string) =>
-      `Xoá "${name}" và toàn bộ số liên hệ của nó. Không khôi phục được.`,
+      `Xoá "${name}", toàn bộ số liên hệ và ảnh mã vào cổng của nó. Không khôi phục được.`,
     contactName: "Người liên hệ / phòng ban",
     contactNamePlaceholder: "Ví dụ: Anh Hùng - kho",
     phone: "Số điện thoại",
@@ -171,6 +179,17 @@ export const vi = {
     save: "Lưu",
     cancel: "Huỷ",
     delete: "Xoá công ty",
+    gatePhoto: "Mã vào cổng",
+    gatePhotoHint:
+      "Chụp mã QR, thẻ hoặc bảng hướng dẫn để vào cổng. Mỗi công ty một ảnh.",
+    gatePhotoEmpty: "Chưa có ảnh mã vào cổng.",
+    gatePhotoRetake: "Chụp lại",
+    gatePhotoRemove: "Xoá ảnh mã vào cổng",
+    gatePhotoPending: "Ảnh mới sẽ được lưu khi bấm Lưu.",
+    gatePhotoWillRemove: "Ảnh sẽ bị xoá khi bấm Lưu.",
+    gatePhotoUndo: "Hoàn tác",
+    gatePhotoUploading: "Đang tải ảnh lên…",
+    sessionExpired: "Phiên đăng nhập đã hết hạn. Đăng nhập lại rồi thử lại.",
   },
 
   calendar: {
@@ -216,6 +235,7 @@ export const vi = {
   tripDetail: {
     edit: "Sửa tuyến",
     editCompany: "Sửa thông tin công ty",
+    gatePhotoOpen: "Chạm vào ảnh để mở to.",
     delivered: "Đã giao",
     markDelivered: "Đánh dấu đã giao",
     deliveredAt: (time: string) => `Đã giao lúc ${time}`,

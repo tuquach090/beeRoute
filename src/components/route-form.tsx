@@ -10,7 +10,6 @@ import {
 } from "react";
 import {
   AlertTriangle,
-  CornerUpLeft,
   Crosshair,
   ExternalLink,
   Flag,
@@ -527,15 +526,6 @@ function ResultCard({
       <p className="text-muted-foreground mt-2 text-xs leading-5">
         {vi.route.straightLineNote}
       </p>
-
-      {result.corridor && (
-        <p className="bg-muted mt-3 flex gap-2 rounded-xl p-3 text-xs leading-5">
-          <CornerUpLeft className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          {result.corridor.sidesKnown
-            ? vi.route.corridorNote(result.corridor.uTurns)
-            : vi.route.corridorNoteNoSides}
-        </p>
-      )}
 
       <div className="mt-4 space-y-2">
         {/* Saving belongs with the result: it is the only thing the trip can

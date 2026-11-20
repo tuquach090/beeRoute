@@ -21,6 +21,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { AddressInput } from "@/components/address-input";
+import {
+  GatePhotoField,
+  type GatePhotoDraft,
+} from "@/components/gate-photo-field";
 import { zodResolver } from "@/lib/validation/zod-resolver";
 import {
   companySchema,
@@ -28,17 +32,24 @@ import {
   type CompanyValues,
 } from "@/lib/validation/company";
 import { deleteCompany, saveCompany } from "@/lib/companies/actions";
-import type { CompanyWithContacts } from "@/lib/companies/queries";
+import { gatePhotoPath } from "@/lib/companies/storage";
+import type { CompanyDetail } from "@/lib/companies/queries";
+import {
+  PHOTO_BUCKET,
+  extensionForType,
+  newPhotoFileName,
+} from "@/lib/trips/storage";
+import { createClient } from "@/lib/supabase/client";
 import { vi } from "@/lib/i18n/vi";
 
 type Props = {
   /** Omitted when creating. */
-  company?: CompanyWithContacts;
+  company?: CompanyDetail;
   /** Where to go after saving, from ?returnTo= (CLAUDE.md §5.3). */
   returnTo?: string;
 };
 
-function toFormValues(company?: CompanyWithContacts): CompanyInput {
+function toFormValues(company?: CompanyDetail): CompanyInput {
   if (!company) {
     return {
       displayName: "",
@@ -47,6 +58,7 @@ function toFormValues(company?: CompanyWithContacts): CompanyInput {
       lng: Number.NaN,
       note: "",
       isPublic: false,
+      gatePhotoPath: null,
       contacts: [{ contactName: "", phone: "" }],
     };
   }
@@ -57,6 +69,7 @@ function toFormValues(company?: CompanyWithContacts): CompanyInput {
     lng: company.lng,
     note: company.note ?? "",
     isPublic: company.is_public,
+    gatePhotoPath: company.gate_photo_path,
     contacts: company.company_contacts.length
       ? company.company_contacts.map((c) => ({
           id: c.id,
@@ -73,8 +86,10 @@ export function CompanyForm({ company, returnTo }: Props) {
   const addressId = useId();
   const noteId = useId();
   const publicId = useId();
+  const gatePhotoId = useId();
 
   const [serverError, setServerError] = useState<string | null>(null);
+  const [gatePhoto, setGatePhoto] = useState<GatePhotoDraft>({ kind: "keep" });
   const [deleting, startDelete] = useTransition();
 
   const isEdit = Boolean(company);
@@ -110,9 +125,50 @@ export function CompanyForm({ company, returnTo }: Props) {
 
   async function onSubmit(values: CompanyValues) {
     setServerError(null);
-    const result = await saveCompany(company?.id ?? null, values);
+
+    let photoPath = gatePhoto.kind === "remove" ? null : values.gatePhotoPath;
+    let uploaded: string | null = null;
+    const supabase = createClient();
+
+    // The browser uploads straight to the bucket, like delivery photos: no
+    // server action body limit, no service-role key (CLAUDE.md §7).
+    if (gatePhoto.kind === "new") {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setServerError(vi.companyForm.sessionExpired);
+        return;
+      }
+
+      const path = gatePhotoPath(
+        user.id,
+        newPhotoFileName(extensionForType(gatePhoto.blob.type)),
+      );
+      const { error } = await supabase.storage
+        .from(PHOTO_BUCKET)
+        .upload(path, gatePhoto.blob, {
+          contentType: gatePhoto.blob.type || "image/jpeg",
+          upsert: false,
+        });
+      if (error) {
+        setServerError(error.message);
+        return;
+      }
+      uploaded = path;
+      photoPath = path;
+    }
+
+    const result = await saveCompany(company?.id ?? null, {
+      ...values,
+      gatePhotoPath: photoPath,
+    });
 
     if (!result.ok) {
+      // Nothing points at the file just uploaded; left there it would eat
+      // quota forever (CLAUDE.md §7).
+      if (uploaded)
+        await supabase.storage.from(PHOTO_BUCKET).remove([uploaded]);
       setServerError(result.message);
       return;
     }
@@ -246,6 +302,27 @@ export function CompanyForm({ company, returnTo }: Props) {
         />
       </Field>
 
+      <section className="space-y-2">
+        <div>
+          <h2 id={gatePhotoId} className="text-sm font-semibold">
+            {vi.companyForm.gatePhoto}{" "}
+            <span className="font-normal text-muted-foreground">
+              ({vi.common.optional})
+            </span>
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {vi.companyForm.gatePhotoHint}
+          </p>
+        </div>
+        <div role="group" aria-labelledby={gatePhotoId}>
+          <GatePhotoField
+            currentUrl={company?.gate_photo_url ?? null}
+            draft={gatePhoto}
+            onChange={setGatePhoto}
+          />
+        </div>
+      </section>
+
       <label
         htmlFor={publicId}
         className="flex cursor-pointer items-start gap-3 rounded-xl border bg-card p-4"
@@ -325,7 +402,9 @@ export function CompanyForm({ company, returnTo }: Props) {
             {isSubmitting && (
               <Loader2 className="size-4 animate-spin" aria-hidden />
             )}
-            {vi.companyForm.save}
+            {isSubmitting && gatePhoto.kind === "new"
+              ? vi.companyForm.gatePhotoUploading
+              : vi.companyForm.save}
           </Button>
         </div>
       </div>
