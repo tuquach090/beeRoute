@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { companySearchFields, matchesSearch } from "@/lib/companies/match";
 import { vi } from "@/lib/i18n/vi";
 import { useVisualViewport } from "@/lib/use-visual-viewport";
 import type { CompanyWithContacts } from "@/lib/companies/queries";
@@ -39,15 +40,11 @@ export function CompanyPickerSheet({
   const searchRef = useRef<HTMLInputElement>(null);
   const viewport = useVisualViewport();
 
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return companies;
-    return companies.filter(
-      (c) =>
-        c.display_name.toLowerCase().includes(q) ||
-        c.address.toLowerCase().includes(q),
-    );
-  }, [companies, query]);
+  // Same matching as the company list: accents optional, every word counts.
+  const results = useMemo(
+    () => companies.filter((c) => matchesSearch(companySearchFields(c), query)),
+    [companies, query],
+  );
 
   function openChange(next: boolean) {
     if (next) {

@@ -115,7 +115,7 @@ với "đã cố ý đổi sang Vị trí hiện tại", và điểm mặc đị
 chuyển trang.
 
 **b) Các điểm đến** (bắt buộc ít nhất 1):
-- Nút **"+ Thêm điểm đến"** → màn hình chọn công ty **toàn màn hình, ô tìm nằm trên cùng** (để bàn phím không che), tìm theo tên/địa chỉ,
+- Nút **"+ Thêm điểm đến"** → màn hình chọn công ty **toàn màn hình, ô tìm nằm trên cùng** (để bàn phím không che), tìm như ở danh sách công ty (mục 5.3),
   chọn nhiều bằng checkbox, bấm "Xong". Huỷ thì không áp dụng gì.
 - Chưa có công ty nào hoặc không tìm thấy → nút **"Tạo công ty mới"** →
   `/companies/new?returnTo=/`.
@@ -142,13 +142,23 @@ và nút **"Mở trên Google Maps"**.
 
 | Trường | Bắt buộc | Ghi chú |
 |---|---|---|
-| Tên hiển thị | ✅ | Tối đa 120 ký tự |
+| Tên hiển thị | ✅ | Tối đa 120 ký tự. **Không trùng** với công ty khác của mình |
 | Địa chỉ | ✅ | **Bắt buộc có toạ độ** mới lưu được (xem mục 8) |
 | Liên hệ | ❌ | Nhiều dòng. Mỗi dòng: tên người/phòng ban + số điện thoại |
 | Ghi chú | ❌ | Việc cần làm khi tới nơi |
 | Mã vào cổng | ❌ | **Một ảnh** (QR, thẻ, bảng hướng dẫn). Chụp hoặc chọn từ thư viện, đổi, xoá được |
 | Cho người khác tìm thấy | ❌ | Cờ `is_public`, mặc định tắt (xem mục 7) |
 
+- **Tìm kiếm** ở đầu danh sách (dính dưới thanh đầu trang khi cuộn): tìm theo tên,
+  địa chỉ, tên người liên hệ, số điện thoại; **không cần gõ dấu** ("dai hoa" ra
+  "Đại Hoa"); mọi từ phải có mặt nhưng không cần đúng thứ tự. Bảng chọn công ty ở
+  trang tối ưu dùng chung logic này (`src/lib/companies/match.ts`).
+- **Tên trùng bị chặn** (thêm 20/11/2026), cả khi tạo lẫn khi đổi tên: lỗi hiện dưới
+  ô tên, kèm link mở công ty trùng. So không phân biệt hoa thường và khoảng trắng
+  thừa, nhưng **có phân biệt dấu** ("Hoà" khác "Hoa"). Chỉ so với công ty của chính
+  mình. Kiểm tra trong server action, **không có unique index**: dữ liệu cũ có thể
+  đã trùng sẵn (chính vì vậy mới có chức năng gộp) và index sẽ không tạo được. Gộp
+  hết công ty trùng rồi thì có thể thêm index sau.
 - **Một dòng liên hệ chỉ cần có tên HOẶC có số** — cả hai đều không bắt buộc. Dòng trống
   cả hai thì bị bỏ khi lưu, không tạo bản ghi rác.
 - Số điện thoại có nhập thì phải đúng định dạng VN: 10–11 số bắt đầu bằng `0`, hoặc `+84`.
@@ -486,6 +496,7 @@ src/
   lib/
     supabase/                       client / server / middleware / env
     companies/                      queries.ts (đọc) + actions.ts (ghi, gộp) + storage.ts (đường dẫn ảnh mã cổng)
+                                    + match.ts (tìm không dấu, chặn tên trùng), có test
     trips/                          queries/actions + storage.ts (đường dẫn ảnh)
     settings/                       queries/actions + types.ts (điểm bắt đầu mặc định)
     dates/vn-date.ts                múi giờ VN + lưới lịch, có test

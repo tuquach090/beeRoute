@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Combine, Globe, Loader2, Phone } from "lucide-react";
+import { Check, Combine, Globe, Loader2, Phone, Search, X } from "lucide-react";
 import { RowChevron } from "@/components/row-chevron";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -16,12 +17,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { mergeCompanies } from "@/lib/companies/actions";
+import { companySearchFields, matchesSearch } from "@/lib/companies/match";
 import { cn } from "@/lib/utils";
 import { vi } from "@/lib/i18n/vi";
 import type { CompanyWithContacts } from "@/lib/companies/queries";
 
 /**
- * The company list, plus a merge mode: tick the duplicates, pick which one
+ * The company list with a search box, plus a merge mode: tick the duplicates, pick which one
  * survives, and the rest fold into it (merge_companies in the migration).
  */
 export function CompanyList({
@@ -35,6 +37,12 @@ export function CompanyList({
   const [targetId, setTargetId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [query, setQuery] = useState("");
+
+  const shown = useMemo(
+    () => companies.filter((c) => matchesSearch(companySearchFields(c), query)),
+    [companies, query],
+  );
 
   const chosen = companies.filter((c) => selected.includes(c.id));
   const target = chosen.find((c) => c.id === targetId) ?? null;
@@ -72,6 +80,50 @@ export function CompanyList({
 
   return (
     <>
+      {/* Sticks under the app header so it stays one tap away while
+          scrolling a long list. */}
+      <div
+        className="bg-background sticky z-10 -mx-4 px-4 py-2"
+        style={{ top: "calc(3.5rem + env(safe-area-inset-top, 0px))" }}
+      >
+        <div className="relative">
+          <Search
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            aria-hidden
+          />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={vi.companies.searchPlaceholder}
+            aria-label={vi.companies.search}
+            enterKeyHint="search"
+            autoComplete="off"
+            className="h-12 pr-11 pl-9"
+          />
+          {query && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute top-1/2 right-1 size-10 -translate-y-1/2"
+              aria-label={vi.companies.clearSearch}
+              onClick={() => setQuery("")}
+            >
+              <X className="size-4" aria-hidden />
+            </Button>
+          )}
+        </div>
+        {query.trim() && (
+          <p
+            className="text-muted-foreground tnum mt-1.5 text-xs"
+            aria-live="polite"
+          >
+            {vi.companies.resultCount(shown.length, companies.length)}
+          </p>
+        )}
+      </div>
+
       {companies.length >= 2 &&
         (merging ? (
           <p className="bg-tint text-tint-foreground rounded-xl p-3 text-sm leading-5">
@@ -88,8 +140,14 @@ export function CompanyList({
           </Button>
         ))}
 
+      {shown.length === 0 && (
+        <p className="text-muted-foreground py-8 text-center text-sm">
+          {vi.companies.notFound}
+        </p>
+      )}
+
       <ul className={cn("space-y-2", merging && "pb-20")}>
-        {companies.map((c) => {
+        {shown.map((c) => {
           const body = (
             <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-center gap-2">

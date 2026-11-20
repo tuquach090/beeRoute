@@ -4,10 +4,20 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { companySchema } from "@/lib/validation/company";
 import { PHOTO_BUCKET } from "@/lib/trips/storage";
+import { vi } from "@/lib/i18n/vi";
+import { findDuplicateName } from "./match";
 import { isOwnGatePhotoPath } from "./storage";
 
 export type SaveResult =
-  { ok: true; id: string } | { ok: false; message: string };
+  | { ok: true; id: string }
+  | {
+      ok: false;
+      message: string;
+      /** Set when the message belongs under one field rather than the form. */
+      field?: "displayName";
+      /** The company already using the name, so the form can link to it. */
+      duplicateId?: string;
+    };
 
 /**
  * Validates on the server as well as in the form. A client can post anything;
@@ -42,6 +52,27 @@ export async function saveCompany(
     !isOwnGatePhotoPath(user.id, v.gatePhotoPath)
   ) {
     return { ok: false, message: "Ảnh mã vào cổng không hợp lệ" };
+  }
+
+  // No two of your own companies share a name (case and spacing ignored).
+  // Checked here rather than with a unique index: data from before this rule
+  // may already hold duplicates — that is what merging is for — and an index
+  // would refuse to build over them. Other people's public companies do not
+  // count; they are not in your list.
+  const { data: own, error: ownError } = await supabase
+    .from("companies")
+    .select("id, display_name")
+    .eq("user_id", user.id);
+  if (ownError) return { ok: false, message: ownError.message };
+
+  const duplicate = findDuplicateName(own ?? [], v.displayName, companyId);
+  if (duplicate) {
+    return {
+      ok: false,
+      message: vi.companyForm.duplicateName(duplicate.display_name),
+      field: "displayName",
+      duplicateId: duplicate.id,
+    };
   }
 
   // Read before writing: once the row is updated, the old path is gone and

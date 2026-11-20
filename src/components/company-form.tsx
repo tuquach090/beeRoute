@@ -89,6 +89,7 @@ export function CompanyForm({ company, returnTo }: Props) {
   const gatePhotoId = useId();
 
   const [serverError, setServerError] = useState<string | null>(null);
+  const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [gatePhoto, setGatePhoto] = useState<GatePhotoDraft>({ kind: "keep" });
   const [deleting, startDelete] = useTransition();
 
@@ -106,6 +107,7 @@ export function CompanyForm({ company, returnTo }: Props) {
     control,
     handleSubmit,
     setValue,
+    setError,
     formState: { errors, isSubmitting },
   } = form;
 
@@ -125,6 +127,7 @@ export function CompanyForm({ company, returnTo }: Props) {
 
   async function onSubmit(values: CompanyValues) {
     setServerError(null);
+    setDuplicateId(null);
 
     let photoPath = gatePhoto.kind === "remove" ? null : values.gatePhotoPath;
     let uploaded: string | null = null;
@@ -169,7 +172,16 @@ export function CompanyForm({ company, returnTo }: Props) {
       // quota forever (CLAUDE.md §7).
       if (uploaded)
         await supabase.storage.from(PHOTO_BUCKET).remove([uploaded]);
-      setServerError(result.message);
+      if (result.field) {
+        setError(
+          result.field,
+          { message: result.message },
+          { shouldFocus: true },
+        );
+        setDuplicateId(result.duplicateId ?? null);
+      } else {
+        setServerError(result.message);
+      }
       return;
     }
 
@@ -228,8 +240,18 @@ export function CompanyForm({ company, returnTo }: Props) {
           className="h-12"
           maxLength={120}
           placeholder={vi.companyForm.displayNamePlaceholder}
-          {...register("displayName")}
+          {...register("displayName", {
+            onChange: () => setDuplicateId(null),
+          })}
         />
+        {duplicateId && (
+          <Link
+            href={`/companies/${duplicateId}/edit`}
+            className="text-primary inline-block text-xs font-medium underline underline-offset-4"
+          >
+            {vi.companyForm.openDuplicate}
+          </Link>
+        )}
       </Field>
 
       <Field

@@ -115,7 +115,7 @@ export const vi = {
   picker: {
     title: "Chọn công ty",
     description: "Chọn các công ty cần giao trong chuyến này.",
-    search: "Tìm theo tên hoặc địa chỉ",
+    search: "Tìm theo tên, địa chỉ, người liên hệ, số",
     selectedCount: (n: number) => `Đã chọn ${n} công ty`,
     done: "Xong",
     cancel: "Huỷ",
@@ -133,6 +133,11 @@ export const vi = {
     contactCount: (n: number) => `${n} số liên hệ`,
     publicBadge: "Công khai",
     noContact: "Chưa có số liên hệ",
+    searchPlaceholder: "Tìm theo tên, địa chỉ, người liên hệ, số",
+    clearSearch: "Xoá ô tìm",
+    notFound: "Không tìm thấy công ty phù hợp.",
+    resultCount: (shown: number, total: number) =>
+      `${shown} / ${total} công ty`,
   },
 
   merge: {
@@ -190,6 +195,9 @@ export const vi = {
     gatePhotoUndo: "Hoàn tác",
     gatePhotoUploading: "Đang tải ảnh lên…",
     sessionExpired: "Phiên đăng nhập đã hết hạn. Đăng nhập lại rồi thử lại.",
+    duplicateName: (name: string) =>
+      `Đã có công ty tên "${name}". Đặt tên khác để phân biệt.`,
+    openDuplicate: "Mở công ty trùng tên",
   },
 
   calendar: {
